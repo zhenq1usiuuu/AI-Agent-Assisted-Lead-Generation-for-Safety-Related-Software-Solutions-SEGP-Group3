@@ -1,8 +1,10 @@
-"""Run: pytest -q   (or: python test_filter_score.py)
+"""Run: python -m pytest tests/test_scoring.py -q
 Signals are SYNTHETIC but use the same field names as Module 1 output."""
 from datetime import date
 
-from filter_score import org_key, score_result, score_signal
+import asyncio
+
+from app.scoring import apply_scores, org_key, score_result, score_signal
 
 NOW = date(2026, 10, 26)
 
@@ -172,6 +174,25 @@ def test_real_demo_signal_from_module1():
     out = run(demo)
     assert out["summary"]["accounts"] == 1
     assert out["accounts"][0]["signals"][0]["gates"] == []
+
+
+def test_apply_scores_records_stage_and_keeps_later_stages_unexecuted():
+    result = {"stages": {}, "signals": [sig()],
+              "not_executed": ["filter_score", "llm_reasoning", "customer_review", "write_to_crm"]}
+    out = apply_scores(result, score_result(result, NOW))
+    assert out["stages"]["filter_score"]["status"] == "completed"
+    assert "filter_score" not in out["not_executed"]
+    assert out["not_executed"] == ["llm_reasoning", "customer_review", "write_to_crm"]
+
+
+def test_tool_runner_dispatches_filter_score_but_model_cannot_see_it():
+    from app.tools import TOOLS, ToolRunner
+    runner = ToolRunner()
+    out = asyncio.run(runner.call("filter_score", result={"signals": [sig()]}))
+    assert out["summary"]["accounts"] == 1
+    assert runner.trace[-1]["tool"] == "filter_score" and runner.trace[-1]["status"] == "ok"
+    assert len(TOOLS) == 6
+    assert all(t["function"]["name"] != "filter_score" for t in TOOLS)
 
 
 if __name__ == "__main__":  # tiny runner so tests work without pytest

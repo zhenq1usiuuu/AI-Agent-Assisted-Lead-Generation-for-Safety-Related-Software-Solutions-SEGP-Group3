@@ -39,6 +39,7 @@ def parser():
     command.add_argument('--source-query', help='Explicit search term for a supported public SIRIM GET form.')
     command.add_argument('--permissions-confirmed', action='store_true', help='Confirm that you reviewed source terms and access permissions. Robots checks still apply.')
     command.add_argument('--output', type=Path, help='Save one-shot JSON to a new UTF-8 file; existing files are never overwritten.')
+    command.add_argument('--score', action='store_true', help='After extraction, run the deterministic Filter + score stage on the result (no model calls, no CRM write).')
     return command
 
 
@@ -72,6 +73,16 @@ async def run_task(request):
     print('Running: Receive prompt -> Fetch + clean -> Extract signals', file=sys.stderr, flush=True)
     async with asyncio.timeout(900):
         return await execute(request)
+
+
+async def score_run(result):
+    """Run Filter + score through the tool runner and attach the decisions."""
+    from .scoring import apply_scores
+    from .tools import ToolRunner
+    runner = ToolRunner()
+    decisions = await runner.call('filter_score', result=result)
+    result.setdefault('tool_trace', []).extend(runner.trace)
+    return apply_scores(result, decisions)
 
 
 def emit(result, output=None):
@@ -184,6 +195,8 @@ def main(argv=None):
                 if value is not None:
                     saved[name] = value
             result = asyncio.run(run_task(RunRequest.model_validate(saved)))
+            if args.score:
+                result = asyncio.run(score_run(result))
             emit(result, args.output)
             return 1 if result['status']=='failed' else 0
         one_shot = args.categories is not None or args.prompt is not None or args.prompt_file is not None
@@ -206,6 +219,8 @@ def main(argv=None):
                              permissions_confirmed=args.permissions_confirmed, max_pages=args.max_pages or default_budget,
                              source_ids=source_ids, **processing_options(args))
         result = asyncio.run(run_task(request))
+        if args.score:
+            result = asyncio.run(score_run(result))
         emit(result, args.output)
         return 1 if result['status'] == 'failed' else 0
     except EOFError:

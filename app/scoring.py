@@ -1,10 +1,10 @@
 """
-Module 2 (v0): Filter + score.
+Module 2 (v0): Filter + score.  (lives in app/ so the runner can call it)
 
 Consumes the result JSON exported by Module 1 (fetch + clean + extract) and
 produces deterministic, explainable decisions. NO LLM calls, NO CRM writes.
 
-    python filter_score.py result.json --out decisions.json
+    python -m app.scoring result.json --out decisions.json
 
 Input fields used (from Module 1 signals): signal_id, organisation,
 organisation_specific, sector, trigger_type, workflow, safety_topic,
@@ -258,6 +258,20 @@ def score_result(result: dict, now: date | None = None) -> dict:
         accounts=accounts, unresolved_signals=unresolved,
         merge_candidates=merge_candidates,
         not_executed=["llm_reasoning", "customer_review", "write_to_crm"])
+
+
+def apply_scores(result: dict, decisions: dict) -> dict:
+    """Attach decisions to a Module 1 result and record that the stage ran.
+    Later stages stay in not_executed."""
+    result["filter_score"] = decisions
+    result.setdefault("stages", {})["filter_score"] = dict(
+        status="completed", executor="deterministic_rules",
+        rubric_version=decisions.get("rubric_version"),
+        account_count=decisions["summary"]["accounts"],
+        unresolved_count=decisions["summary"]["unresolved"])
+    result["not_executed"] = [x for x in result.get("not_executed", [])
+                              if x != "filter_score"]
+    return result
 
 
 if __name__ == "__main__":

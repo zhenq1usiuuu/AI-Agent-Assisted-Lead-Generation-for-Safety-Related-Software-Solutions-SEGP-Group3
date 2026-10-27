@@ -314,6 +314,11 @@ class ToolRunner:
             elif name=='inspect_public_source':
                 from .connectors import inspect_public_source
                 result=inspect_public_source(**kwargs)
+            elif name=='filter_score':
+                # Runner-only: deliberately NOT in TOOLS, so the model cannot call it
+                # and the static prefix / checkpoints are unaffected.
+                from .scoring import score_result
+                result=score_result(**kwargs)
             else: raise ValueError('Unknown tool')
             self.trace.append({'tool':name,'status':'ok','url':kwargs.get('url'),
                 'duration_ms':round((time.monotonic()-start)*1000)})
