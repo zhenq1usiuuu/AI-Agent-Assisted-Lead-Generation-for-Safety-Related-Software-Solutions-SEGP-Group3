@@ -1,6 +1,0 @@
-# Module 3 second-model settings. Put these in the project .env file.
-# The default uses OpenAI's OpenAI-compatible API; other compatible providers
-# can be selected by changing the base URL and model name.
-REASONING_API_KEY=
-REASONING_BASE_URL=https://api.openai.com/v1
-REASONING_MODEL=gpt-4o-mini
