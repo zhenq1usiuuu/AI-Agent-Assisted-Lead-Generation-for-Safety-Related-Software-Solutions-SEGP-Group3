@@ -2,11 +2,18 @@
 import asyncio
 import json
 import os
+from urllib.parse import urlsplit
 
 import httpx
 
 from .context import ROOT
 from .reasoning_models import ReasoningOutput
+
+
+DEFAULT_PROVIDER_RATES = {
+    "api.openai.com": {"input": 0.15, "output": 0.60},
+    "api.deepseek.com": {"input": 0.27, "output": 1.10},
+}
 
 
 class ReasoningClient:
@@ -30,6 +37,59 @@ class ReasoningClient:
         self.max_output_tokens = max_output_tokens
         self.usage: list[dict] = []
         self.system_prompt = (ROOT / "prompts" / "reasoning.md").read_text(encoding="utf-8-sig")
+        self.provider = urlsplit(self.base_url).hostname or "unknown"
+
+    @staticmethod
+    def _optional_rate(name: str, default: float | None) -> float | None:
+        value = os.getenv(name, "").strip()
+        if not value:
+            return default
+        try:
+            return float(value)
+        except ValueError as exc:
+            raise ValueError(f"{name} must be a number of USD per million tokens.") from exc
+
+    def cost_info(self, usage: dict) -> dict:
+        """Return raw usage and a clearly labelled estimate for one batch call."""
+        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+        completion_tokens = int(usage.get("completion_tokens") or 0)
+        defaults = DEFAULT_PROVIDER_RATES.get(self.provider, {})
+        input_rate = self._optional_rate(
+            "REASONING_INPUT_COST_PER_MILLION", defaults.get("input")
+        )
+        output_rate = self._optional_rate(
+            "REASONING_OUTPUT_COST_PER_MILLION", defaults.get("output")
+        )
+        pricing_basis = (
+            "configured"
+            if os.getenv("REASONING_INPUT_COST_PER_MILLION", "").strip()
+            or os.getenv("REASONING_OUTPUT_COST_PER_MILLION", "").strip()
+            else "default_provider_estimate"
+            if self.provider in DEFAULT_PROVIDER_RATES
+            else "not_configured"
+        )
+        estimate = None
+        if input_rate is not None and output_rate is not None:
+            estimate = round(
+                (prompt_tokens * input_rate + completion_tokens * output_rate) / 1_000_000,
+                8,
+            )
+        return {
+            "provider": self.provider,
+            "model": self.model,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "estimated_cost_usd": estimate,
+            "pricing_usd_per_million": {
+                "input": input_rate,
+                "output": output_rate,
+            },
+            "pricing_basis": pricing_basis,
+            "note": (
+                "Estimate based on returned token usage and configured/default rates; "
+                "the provider invoice is authoritative."
+            ),
+        }
 
     def validate_distinct_model(self) -> None:
         """Fail closed when the second model is identical to the Kimi model."""
@@ -129,6 +189,7 @@ class ReasoningClient:
             {
                 "stage": "llm_reasoning",
                 "model": self.model,
+                "provider": self.provider,
                 "usage": data.get("usage", {}),
             }
         )
