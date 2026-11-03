@@ -178,7 +178,7 @@ For downstream integration, consume the exported result JSON (or the result obje
 
 ## LLM reasoning (Module 3)
 
-`app/reasoning.py` consumes a scored result JSON and sends a compact evidence brief to a second model. It returns a user-facing overall summary plus, for every account, a recommendation, reason, risks, supporting evidence and next-step hypothesis. The model does not change scores, gates, evidence, organisation names or quotations.
+`app/reasoning.py` consumes a scored result JSON and sends a compact evidence brief to a second model. It returns a user-facing overall summary plus, for every account, a code-assigned recommendation, reason, risks, supporting evidence and next-step hypothesis. The model does not change scores, gates, evidence, organisation names or quotations. Deterministic checks reject altered scores, fabricated quotes and forbidden claims; invalid output retries and is otherwise marked for human review.
 
 | Pipeline stage | Executor |
 |---|---|
