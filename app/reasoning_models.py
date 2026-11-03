@@ -11,7 +11,6 @@ class StrictModel(BaseModel):
 class ReasonedAccount(StrictModel):
     account_key: str = Field(min_length=1)
     display_name: str = Field(min_length=1)
-    recommendation: Literal["shortlist", "research", "review", "exclude"]
     reason: str = Field(min_length=10)
     risks: list[str]
     supporting_signal_ids: list[str]
