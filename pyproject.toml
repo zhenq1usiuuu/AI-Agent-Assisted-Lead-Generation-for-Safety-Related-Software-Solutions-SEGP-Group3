@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safety-signal-lab"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []  # already in requirements.txt
+
+[tool.setuptools.packages.find]
+include = ["app*"]  # only package the app/ directory
+
+[project.scripts]
+signal-lab    = "app.cli:main"
+signal-review = "app.review:main"
+signal-crm    = "app.crm:main"

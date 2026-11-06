@@ -1,6 +1,6 @@
 # Safety Signal Lab
 
-Terminal-first Malaysian safety-software research. The implemented stages are Receive prompt (Kimi), Fetch + clean (local tools), Extract signals (Kimi plus evidence checks), Filter + score (deterministic rules), and LLM reasoning (a separate configurable model). Customer review and CRM writes are not executed.
+Terminal-first Malaysian safety-software research. The implemented stages are Receive prompt (Kimi), Fetch + clean (local tools), Extract signals (Kimi plus evidence checks), Filter + score (deterministic rules), LLM reasoning (a separate configurable model), human review (terminal gate), and CRM database write.
 
 ## Setup
 
@@ -202,3 +202,85 @@ python -m app.reasoning scored.json --out reasoned.json
 ```
 
 The default output is a readable report. Add `--json` to print the combined JSON. `--out` writes the complete result and never overwrites an existing file. `app/reasoning.py` refuses to run when the second model is the same model on the same endpoint as the Kimi stage, and rejects model output that references evidence outside its supplied brief. See [MODULE3.md](MODULE3.md) for the detailed Module 3 handoff.
+
+## Human review (Module 4)
+
+`app/review.py` implements the terminal human-review gate (step 6). It reads the JSON written by `app/reasoning` and lets a reviewer approve, edit, reject, merge or defer each account. Approved and edited accounts are placed in a `crm_queue` for the CRM writer. Nothing here calls a model.
+
+```powershell
+# After running reasoning:
+signal-review reasoned.json --reviewer yourname --out review.json
+
+# Or without the installed entry point:
+python -m app.review reasoned.json --reviewer yourname --out review.json
+```
+
+Decision options at the prompt:
+
+| Key | Decision | Goes to CRM? | Reason required? |
+|-----|----------|-------------|-----------------|
+| `a` | approve  | Yes | Only if overriding recommendation, account is gated, or AI did not validate |
+| `e` | edit     | Yes (with edits) | Yes |
+| `r` | reject   | No | Yes |
+| `m` | merge    | No | Yes |
+| `d` | defer    | No | Optional |
+
+The output `review.json` contains every decision log (including rejections) plus a `crm_queue` list of accounts ready to be written to the CRM database.
+
+## One-stop terminal commands (after `pip install -e .`)
+
+Installing the package once registers three short commands that replace `python -m app.*`:
+
+```powershell
+# Install once (from the project root, inside your venv):
+pip install -e .
+```
+
+| Command | Equivalent | Purpose |
+|---------|-----------|---------|
+| `signal-lab` | `python -m app.cli` | Run the full research pipeline |
+| `signal-review` | `python -m app.review` | Run the terminal human-review gate |
+| `signal-crm` | `python -m app.crm` | Write approved leads to the CRM database |
+
+Full end-to-end demo (offline, no API key needed):
+
+```powershell
+signal-lab --mode demo --prompt "Test research" --score --output scored.json
+python -m app.reasoning scored.json --out reasoned.json
+signal-review reasoned.json --reviewer yourname --out review.json
+signal-crm review.json
+```
+
+## CRM database writer (Step 7)
+
+`app/crm.py` reads the `crm_queue` from a completed review JSON and writes each approved lead into a local SQLite database (`data/crm.db` by default). Re-running on the same file is safe — duplicates are skipped using an idempotency key derived from the account evidence.
+
+```powershell
+signal-crm review.json
+# Custom database path:
+signal-crm review.json --db path/to/crm.db
+# Or without the installed entry point:
+python -m app.crm review.json
+```
+
+To inspect the database directly:
+
+```powershell
+python -c "import sqlite3; conn=sqlite3.connect('data/crm.db'); rows=conn.execute('SELECT display_name, grade, score, reviewed_by FROM leads').fetchall(); [print(r) for r in rows]"
+```
+
+The `leads` table schema:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `idempotency_key` | TEXT (PK) | Unique hash — prevents duplicate inserts |
+| `account_key` | TEXT | Internal company identifier |
+| `display_name` | TEXT | Human-readable company name |
+| `grade` | TEXT | A / B / C / D from scoring |
+| `score` | INTEGER | Numeric score out of 100 |
+| `target_buyer_role` | TEXT | Hypothesised buyer role |
+| `reviewed_by` | TEXT | Reviewer name from `signal-review` |
+| `reviewed_at` | TEXT | ISO 8601 timestamp of the review decision |
+| `review_reason` | TEXT | Reviewer's written justification |
+| `ai_reason` | TEXT | AI explanation (only if validation passed) |
+| `evidence_json` | TEXT | JSON array of supporting signals |
