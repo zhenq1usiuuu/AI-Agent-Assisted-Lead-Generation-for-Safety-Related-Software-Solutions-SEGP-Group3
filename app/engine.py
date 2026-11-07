@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from .budget import BudgetExceeded, EvaluationBudget
-from .content import normalized_url, duplicate_of, chunk_document, split_chunk
+from .content import normalized_url, duplicate_of, chunk_document, split_chunk, prioritize_chunks
 from .context import PREFIX_HASH
 from .llm import KimiClient
 from .models import Plan, ChunkExtraction, SemanticReview, RunRequest
@@ -183,6 +183,7 @@ async def execute_live(request, llm=None):
                 elif doc['document_id'] not in known:
                     state['chunks'].extend(chunk_document(doc))
             persist()
+            state['chunks']=prioritize_chunks(state['chunks'],output['documents'])
             calls=0
             for chunk in state['chunks']:
                 if chunk['status'] not in ('pending','error','incomplete'):
@@ -312,4 +313,21 @@ def finish(state,output):
     if output.get('status')!='needs_clarification':
         partial=bool(output['errors'] or remaining or truncated or state.get('queue') or output.get('stop_reason') or pending_review or state['rejections'])
         output['status']='partial' if partial and (output['documents'] or output.get('stop_reason')) else 'failed' if partial else 'completed'
+    reasons=[]
+    if not eligible:
+        reasons.append('no_extractable_documents: source pages failed or contain context only')
+    if output.get('stop_reason')=='budget_limit':
+        reasons.append('budget_limit: resume this run with a higher cumulative cap')
+    if state.get('queue'):
+        reasons.append('retrieval_limit: queued URLs remain; increase the page cap on resume')
+    if truncated:
+        reasons.append('incomplete_text: inspect PDF warnings; OCR helps scanned pages only')
+    if output['signals'] and all(s.get('evidence_level')=='discovery_only' for s in output['signals']):
+        reasons.append('discovery_only: company candidates found, but no demonstrated workflow need')
+    if not output['signals'] and eligible and not remaining:
+        reasons.append('no_supported_company_signal: inspect abstentions and rejected quotes')
+    output['signal_diagnostics']={'reasons':reasons,'accepted_signals':len(output['signals']),
+        'scoring_eligible_signals':sum(s.get('eligible_for_scoring') is True for s in output['signals']),
+        'fetch_failures':sum(e.get('stage')=='fetch_clean' for e in output['errors']),
+        'ocr_enabled':output.get('request',{}).get('ocr',False)}
     output['finished_at']=datetime.now(timezone.utc).isoformat()

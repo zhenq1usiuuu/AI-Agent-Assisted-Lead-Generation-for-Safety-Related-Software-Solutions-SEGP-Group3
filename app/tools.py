@@ -121,7 +121,8 @@ def discover_links(links, keywords, limit):
     if any(contains(normalized(k), term) for k in keywords for term in safety_terms):
         # Public Malaysian articles often use acronyms or Malay labels instead of the plan's English phrase.
         effective_keywords=list(dict.fromkeys([*keywords, 'occupational safety', 'OSH', 'HSE',
-                                              'keselamatan pekerjaan', 'keselamatan dan kesihatan pekerjaan']))
+                                              'keselamatan pekerjaan', 'keselamatan dan kesihatan pekerjaan',
+                                              'haze', 'jerebu', 'worker health', 'pelitup muka', 'workplace accident', 'kemalangan']))
     def score(link):
         # A keyword such as OSH must not match every URL on dosh.gov.my.
         hay=normalized(urlsplit(link['url']).path+' '+link.get('label',''))

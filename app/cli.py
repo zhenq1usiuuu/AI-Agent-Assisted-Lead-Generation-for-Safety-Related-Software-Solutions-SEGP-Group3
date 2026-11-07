@@ -172,6 +172,11 @@ def interactive(args):
 
 
 def main(argv=None):
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if '--full' in arguments:
+        from .workflow import main as workflow_main
+        arguments.remove('--full')
+        return workflow_main(arguments)
     args = parser().parse_args(argv)
     load_dotenv(ROOT / '.env')
     # Preserve original-language evidence when writing UTF-8 JSON in PowerShell.

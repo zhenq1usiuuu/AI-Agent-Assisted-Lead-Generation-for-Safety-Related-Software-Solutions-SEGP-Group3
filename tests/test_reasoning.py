@@ -268,6 +268,7 @@ def test_score_or_grade_or_banned_word_is_flagged():
 
 
 def test_reasoning_client_sends_strict_schema_without_exposing_the_key(monkeypatch):
+    monkeypatch.setenv("REASONING_USE_KIMI", "false")
     monkeypatch.setenv("MOONSHOT_MODEL", "kimi-k3")
     monkeypatch.setenv("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1")
     monkeypatch.setenv("REASONING_API_KEY", "fake-second-key")
@@ -310,6 +311,7 @@ def test_reasoning_client_sends_strict_schema_without_exposing_the_key(monkeypat
 
 
 def test_deepseek_client_uses_json_object_mode(monkeypatch):
+    monkeypatch.setenv("REASONING_USE_KIMI", "false")
     monkeypatch.setenv("MOONSHOT_MODEL", "kimi-k3")
     monkeypatch.setenv("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1")
     monkeypatch.setenv("REASONING_API_KEY", "fake-deepseek-key")
@@ -355,6 +357,7 @@ def test_deepseek_client_uses_json_object_mode(monkeypatch):
 
 
 def test_second_model_must_differ_from_kimi(monkeypatch):
+    monkeypatch.setenv("REASONING_USE_KIMI", "false")
     monkeypatch.setenv("MOONSHOT_MODEL", "kimi-k3")
     monkeypatch.setenv("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1")
     client = ReasoningClient(

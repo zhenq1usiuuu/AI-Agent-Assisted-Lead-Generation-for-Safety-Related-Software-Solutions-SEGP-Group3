@@ -5,9 +5,34 @@ import os
 from urllib.parse import urlsplit
 
 import httpx
+from pydantic import ValidationError
 
 from .context import ROOT
 from .reasoning_models import ReasoningOutput
+
+
+class ReasoningStructureError(ValueError):
+    """Model content failed the strict output contract."""
+
+
+def parse_reasoning_output(content):
+    """Repair only misplaced string-list questions when the root field is absent."""
+    try:
+        data = json.loads(content)
+        repaired = False
+        if isinstance(data, dict) and 'open_questions' not in data and isinstance(data.get('accounts'), list):
+            misplaced = [a for a in data['accounts'] if isinstance(a, dict) and 'open_questions' in a]
+            if misplaced and all(isinstance(a['open_questions'], list) and
+                                 all(isinstance(q, str) for q in a['open_questions']) for a in misplaced):
+                data['open_questions'] = [q for a in misplaced for q in a.pop('open_questions')]
+                repaired = True
+        return ReasoningOutput.model_validate(data), repaired
+    except (json.JSONDecodeError, ValidationError) as exc:
+        # Return locations/types, never echo potentially sensitive source content.
+        detail = ('Invalid JSON' if isinstance(exc, json.JSONDecodeError) else
+                  '; '.join('.'.join(str(x) for x in e['loc']) + ': ' + e['type']
+                            for e in exc.errors(include_input=False)))
+        raise ReasoningStructureError('Reasoning output schema failed: ' + detail) from None
 
 
 DEFAULT_PROVIDER_RATES = {
@@ -34,6 +59,12 @@ class ReasoningClient:
         self.key = (key if key is not None else os.getenv("REASONING_API_KEY", "")).strip()
         self.base_url = (base_url or os.getenv("REASONING_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
         self.model = model or os.getenv("REASONING_MODEL", "gpt-4o-mini")
+        self.use_kimi = os.getenv("REASONING_USE_KIMI", "").strip().lower() == "true"
+        if self.use_kimi:
+            # Reuse the complete configuration to avoid sending a key to another endpoint.
+            self.key = os.getenv("MOONSHOT_API_KEY", "").strip()
+            self.base_url = os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1").rstrip("/")
+            self.model = model or os.getenv("MOONSHOT_MODEL", "kimi-k3")
         self.max_output_tokens = max_output_tokens
         self.usage: list[dict] = []
         self.system_prompt = (ROOT / "prompts" / "reasoning.md").read_text(encoding="utf-8-sig")
@@ -93,6 +124,8 @@ class ReasoningClient:
 
     def validate_distinct_model(self) -> None:
         """Fail closed when the second model is identical to the Kimi model."""
+        if self.use_kimi:
+            return
         kimi_model = os.getenv("MOONSHOT_MODEL", "kimi-k3").strip().casefold()
         kimi_base = os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1").rstrip("/").casefold()
         if self.model.casefold() == kimi_model and self.base_url.casefold() == kimi_base:
@@ -140,6 +173,9 @@ class ReasoningClient:
             "max_tokens": self.max_output_tokens,
         }
 
+        if self.use_kimi:
+            body["reasoning_effort"] = os.getenv("MOONSHOT_REASONING_EFFORT", "low")
+
         async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
             response = None
             for attempt in range(3):
@@ -180,17 +216,13 @@ class ReasoningClient:
             )
 
         data = response.json()
+        self.usage.append({"stage": "llm_reasoning", "model": self.model,
+                           "provider": self.provider, "usage": data.get("usage", {})})
         choice = data["choices"][0]
         if choice.get("finish_reason") != "stop":
             raise ValueError("Reasoning model did not finish normally; incomplete JSON was rejected.")
 
-        result = ReasoningOutput.model_validate_json(choice["message"].get("content") or "{}")
-        self.usage.append(
-            {
-                "stage": "llm_reasoning",
-                "model": self.model,
-                "provider": self.provider,
-                "usage": data.get("usage", {}),
-            }
-        )
+        result, repaired = parse_reasoning_output(choice["message"].get("content") or "{}")
+        if repaired:
+            self.usage[-1]["structure_repair"] = "Moved account open_questions to missing root field"
         return result

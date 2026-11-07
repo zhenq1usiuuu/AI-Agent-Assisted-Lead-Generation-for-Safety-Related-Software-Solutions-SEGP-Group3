@@ -1,6 +1,6 @@
 # Safety Signal Lab
 
-Terminal-first Malaysian safety-software research. The implemented stages are Receive prompt (Kimi), Fetch + clean (local tools), Extract signals (Kimi plus evidence checks), Filter + score (deterministic rules), and LLM reasoning (a separate configurable model). Customer review and CRM writes are not executed.
+Terminal-first Malaysian safety-software research. The implemented stages are Receive prompt (Kimi), Fetch + clean (local tools), Extract signals (Kimi plus evidence checks), Filter + score (deterministic rules), and LLM reasoning (a separate configurable model). Human review and local SQLite CRM writes are implemented; app.workflow provides a single-session entry point.
 
 ## Setup
 
@@ -166,7 +166,7 @@ The original project brief defines the Malaysian use case. The [AI agent book](h
 
 ## Module One handoff
 
-This branch implements Receive prompt, Fetch + clean, Extract signals, Filter + score, and LLM reasoning for the SEGP group project. Customer review and CRM writes remain for downstream development.
+This branch implements Receive prompt, Fetch + clean, Extract signals, Filter + score, and LLM reasoning for the SEGP group project. Customer review is implemented in app.review. app.crm writes approved records to local SQLite; app.workflow supports bounded feedback reruns.
 
 Local environments, API keys, captured source documents, checkpoints, and evaluation artifacts are intentionally excluded from Git. Links into data/ in EVALUATION.md and REMEDIATION.md refer to local historical artifacts and are unavailable in this checkout. Recreate the environment and configure your own .env using the setup instructions above.
 
@@ -201,4 +201,142 @@ python -m app.cli --mode demo --prompt "Test research" --score --output scored.j
 python -m app.reasoning scored.json --out reasoned.json
 ```
 
-The default output is a readable report. Add `--json` to print the combined JSON. `--out` writes the complete result and never overwrites an existing file. `app/reasoning.py` refuses to run when the second model is the same model on the same endpoint as the Kimi stage, and rejects model output that references evidence outside its supplied brief. See [MODULE3.md](MODULE3.md) for the detailed Module 3 handoff.
+The default output is a readable report. Add `--json` to print the combined JSON. `--out` writes the complete result and never overwrites an existing file. `app/reasoning.py` refuses by default (unless REASONING_USE_KIMI=true) to run when the second model is the same model on the same endpoint as the Kimi stage, and rejects model output that references evidence outside its supplied brief. See [MODULE3.md](MODULE3.md) for the detailed Module 3 handoff.
+
+## Local Kimi testing of all four modules
+
+Use this repository root, not the historical duplicate under OneDrive/.
+The local .env uses MOONSHOT_API_KEY. REASONING_USE_KIMI=true explicitly reuses
+the Moonshot key, endpoint and model for Module 3. This is a single-model
+integration test, not independent cross-model validation. Set it to false
+to restore the separate-model configuration. Environment variables override .env.
+
+After installing requirements.txt into .venv, run these PowerShell commands:
+
+```powershell
+New-Item -ItemType Directory -Force data | Out-Null
+# Modules 1 and 2: retrieval/extraction and deterministic scoring.
+.\.venv\Scripts\python.exe -m app.cli --categories ESG --score --budget-usd 1 --permissions-confirmed --output data/scored.json
+# Module 3: paid Kimi reasoning.
+.\.venv\Scripts\python.exe -m app.reasoning data/scored.json --out data/reasoned.json
+# Module 4: interactive human decisions, no model call or CRM write.
+.\.venv\Scripts\python.exe -m app.review data/reasoned.json --reviewer "Local tester" --out data/reviewed.json
+```
+
+Only use --permissions-confirmed after reviewing source access conditions.
+Inspect status, errors and coverage. Output files must be new on every run.
+The Module 1 --budget-usd cap does NOT cover Module 3. Module 3 can retry
+requests/validation and has no enforced dollar cap. Moonshot reasoning cost
+estimates are null unless pricing rates are configured; inspect returned
+usage and your provider bill.
+
+No-cost checks:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.cli --mode demo --categories ESG --score --output data/demo-scored.json
+.\.venv\Scripts\python.exe -m app.review tests/fixtures/reasoned_demo.json --reviewer "Local tester" --out data/demo-reviewed.json
+.\.venv\Scripts\python.exe -m pytest -q tests
+```
+
+Demo fixtures are synthetic. Running app.reasoning on demo data still costs tokens.
+
+## Signal extraction diagnostics (2026-11-06)
+
+The inspected DOSH-only live runs had HTTP 404, a dashboard without usable
+same-host records, and a missing fatal-case table. Increasing OCR, depth or
+model budget cannot recover records absent from the fetched pages.
+A multi-source live run extracted four ESG candidates before its budget guard
+stopped with 12 chunks remaining. Its PDF had usable text and no OCR warnings.
+
+Extraction now schedules company/table/event-rich chunks first, keeps all
+remaining spans for coverage/resume, and allows 24 lines per chunk instead of
+12 to reduce repeated static-context calls. Existing checkpoints retain their
+original chunk boundaries. Link discovery now recognizes haze/jerebu and
+worker-health signals. Depth, host restrictions, robots and evidence gates are
+unchanged. No candidate is promoted to a demonstrated need without evidence.
+
+Inspect signal_diagnostics, coverage, errors and abstentions in every output.
+For company discovery start with ESG; DOSH-only can still return no records
+until accessible source data exists. Use --ocr only for scanned PDFs after
+installing requirements-ocr.txt. A partial run can be resumed with --resume
+RUN_ID --budget-usd 2 --max-chunks 40 --permissions-confirmed; this increases
+the cumulative cap, not a guaranteed charge. Do not interpret ESG membership
+as safety demand or legal compliance. Scoring also uses a manufacturing/CV
+safety rubric, which is narrower than general inspection research.
+
+Module 3 repairs one unambiguous schema mistake locally: if root open_questions
+is absent and account-level open_questions values are all string arrays, it
+moves those questions to the root without changing account analysis. The repair
+is recorded in model usage. Other schema errors trigger correction within the
+existing three-attempt limit; exhausted attempts fail explicitly. Returned API
+usage is recorded before content validation, including invalid responses.
+Correction retries can incur additional model charges.
+
+## Integrated workflow and CRM (2026-11-07)
+
+The fetched feature/one-stop-cli-and-crm branch added a SQLite writer and
+command aliases, but did not contain orchestration or feedback reruns.
+This local integration adds both while retaining the Kimi configuration,
+structure repair, extraction scheduling, and evidence gates.
+
+From this project directory:
+
+```powershell
+# One session: research -> score -> reasoning -> human review -> local CRM.
+python -m app.cli --full --categories ESG --reviewer "Will"
+# Equivalent dedicated entry point:
+python -m app.workflow --categories ESG --reviewer "Will"
+# Continue existing work without repeating extraction/reasoning unnecessarily:
+python -m app.cli --full --from-result data/reasoned.json --reviewer "Will"
+```
+
+Without --categories, the workflow asks for categories. Source terms must be
+reviewed before a fresh run. Module 3 requires explicit confirmation because
+its calls/retries are billed outside Module 1's --budget-usd cap. There is no
+global workflow dollar cap. A new feedback round has its own research cap;
+--max-rounds defaults to 2 and accepts 1-3 (including the first round).
+An imported result retains its stored research settings for feedback reruns.
+No command claiming a fully offline demo calls Module 3: use tests/mocks for
+an offline full-flow check, or the existing reasoned_demo.json review fixture.
+
+Every workflow writes a unique data/workflows/<uuid>/ directory containing
+research, scored, reasoned, reviewed and feedback JSON, a workflow manifest,
+and a CRM receipt when written. Failure or cancellation preserves completed
+stage artifacts. Continue from an exported scored/reasoned file with
+--from-result; an interrupted review must be reviewed again before CRM write.
+This is not automatic process-level resume. Never pass the checkpoint wrapper.
+
+Approve and edit decisions enter the local CRM queue. A separate terminal
+confirmation writes that queue to data/crm.db (override with --db). Reject,
+defer and merge do not enter CRM. They can trigger an optional clarification
+and fresh research round with saved feedback and an optional extra public URL.
+The source categories remain unchanged; the feedback is a research direction,
+not factual evidence. The new result is rescored and re-reviewed; prior
+approval is never copied forward. Merge records intent only, not entity merging.
+
+SQLite is the implemented CRM backend, not Salesforce/HubSpot or a remote CRM.
+The writer checks completed review decisions against queue identities, names,
+reviewer, timestamps, scores and evidence. It is not cryptographic proof of
+human identity; review files remain trusted local artifacts. Writes use one
+transaction. Exact repeats are skipped; changed records sharing a key raise
+an explicit conflict and roll back that batch rather than silently discard edits.
+No automatic update of previously imported accounts is implemented.
+
+Standalone writer:
+
+```powershell
+python -m app.crm data/reviewed.json --db data/crm.db
+```
+
+Optional editable installation (run in the virtual environment):
+
+```powershell
+python -m pip install -e .
+signal-lab --categories ESG --reviewer "Will"
+```
+
+signal-lab runs the integrated workflow; signal-research retains the previous
+research CLI; signal-review and signal-crm are standalone aliases. Use an
+editable source checkout because prompts/config/static are read from the
+project directory. Plain python -m app.cli retains its prior behavior; add
+--full for the integrated workflow. No external CRM connection is configured.

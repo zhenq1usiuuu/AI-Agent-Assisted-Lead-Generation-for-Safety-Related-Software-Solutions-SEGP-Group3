@@ -37,7 +37,7 @@ def duplicate_of(document, previous):
     return None, near
 
 
-def chunk_document(document, size=4500, max_lines=12):
+def chunk_document(document, size=4500, max_lines=24):
     """Partition full text into contiguous spans; context never changes quote offsets.
 
     Short line batches avoid the former six-company sampling behavior in lists.
@@ -74,3 +74,15 @@ def split_chunk(chunk, text):
     return [{**chunk, 'chunk_id':f"{chunk['document_id']}:{a}:{b}", 'start':a,'end':b,
              'status':'pending','split_depth':chunk.get('split_depth',0)+1}
             for a,b in ((start,middle),(middle,end))]
+
+
+def prioritize_chunks(chunks, documents):
+    """Schedule evidence-rich spans first without dropping any retained text."""
+    by_id = {d['document_id']: d for d in documents}
+    def priority(chunk):
+        text = by_id[chunk['document_id']]['text'][chunk['start']:chunk['end']]
+        companies = len(re.findall(r"\b(?:berhad|bhd|sdn|holdings|manufacturing)\b", text, re.I))
+        rows = len(re.findall(r"(?m)^.*[A-Za-z].*\d[\d,]*\s+\d+\.\d+\s*$", text))
+        events = len(re.findall(r"\b(?:accident|fatal|injur\w*|fined|prosecution|kemalangan|pendakwaan)\b", text, re.I))
+        return -(companies * 3 + rows * 4 + events * 2)
+    return sorted(chunks, key=priority)

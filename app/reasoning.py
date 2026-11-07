@@ -25,7 +25,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .context import ROOT
-from .reasoning_client import ReasoningClient
+from .reasoning_client import ReasoningClient, ReasoningStructureError
 from .reasoning_models import ReasoningOutput
 from .scoring import apply_scores, score_result
 
@@ -417,7 +417,18 @@ async def reason_result(result: dict, client: ReasoningClient | None = None) -> 
 
     for attempt in range(MAX_REASONING_ATTEMPTS):
         attempts = attempt + 1
-        output = await client.generate(payload)
+        try:
+            output = await client.generate(payload)
+        except ReasoningStructureError as exc:
+            if attempt == MAX_REASONING_ATTEMPTS - 1:
+                raise ReasoningStructureError(
+                    f"Reasoning output remained invalid after {MAX_REASONING_ATTEMPTS} attempts. {exc}"
+                ) from None
+            payload["correction_note"] = (
+                str(exc) + ". Return the complete JSON again. Root fields: summary, accounts, "
+                "open_questions. Never put open_questions inside an account. Follow output_schema."
+            )
+            continue
         issues = validate_reasoning(output, decisions, payload, index)
         if not issues:
             break

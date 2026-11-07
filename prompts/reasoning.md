@@ -47,3 +47,9 @@ instruction and correct only the listed validation failures.
 
 # Output
 Return strict JSON matching the supplied OUTPUT_SCHEMA for llm_reasoning.
+
+The root object has exactly summary, accounts, and open_questions.
+open_questions is a required root-level array of strings (use [] if none).
+Never put open_questions inside accounts. Each account contains only
+account_key, display_name, reason, risks, supporting_signal_ids, and
+next_step_hypothesis. Return the complete object, not a partial correction.
