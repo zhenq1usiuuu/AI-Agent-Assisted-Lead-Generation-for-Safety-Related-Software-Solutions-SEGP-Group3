@@ -171,3 +171,7 @@ This branch implements Receive prompt, Fetch + clean, and Extract signals for th
 Local environments, API keys, captured source documents, checkpoints, and evaluation artifacts are intentionally excluded from Git. Links into data/ in EVALUATION.md and REMEDIATION.md refer to local historical artifacts and are unavailable in this checkout. Recreate the environment and configure your own .env using the setup instructions above.
 
 For downstream integration, consume the exported result JSON (or the result object inside a local checkpoint). Preserve signals, documents, coverage, errors, status, and remaining_chunks. Partial results can contain usable evidence; discovery_only records with eligible_for_scoring=false require further research before demand scoring.
+
+## Filter + score (Module 2 v0)
+
+`app/scoring.py` implements the deterministic Filter + score stage: entity grouping, duplicate handling, hard gates and the placeholder rubric (weights must be calibrated and documented by the team). Add `--score` to a one-shot or resumed run to attach `filter_score` decisions to the result JSON, or score a saved result with `python -m app.scoring result.json`. The stage makes no model calls and writes nothing to a CRM; `llm_reasoning`, `customer_review` and `write_to_crm` remain in `not_executed`. The function is registered in `ToolRunner` only, not in the model-visible `TOOLS` list.
