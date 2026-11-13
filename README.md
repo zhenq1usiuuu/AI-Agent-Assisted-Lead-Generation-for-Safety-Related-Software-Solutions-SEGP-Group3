@@ -340,3 +340,31 @@ research CLI; signal-review and signal-crm are standalone aliases. Use an
 editable source checkout because prompts/config/static are read from the
 project directory. Plain python -m app.cli retains its prior behavior; add
 --full for the integrated workflow. No external CRM connection is configured.
+
+## Module progress and timing
+
+The integrated entry points (--full, app.workflow and signal-lab) display a
+short step labels and a live elapsed stopwatch for Modules 1-4, CRM and
+clarification/rerun, followed by a timing summary at the end. Detailed timestamps
+and result summaries are written to files only. These are execution explanations,
+not the model's private chain of thought. No additional model calls are made.
+Module 1 timing covers receive prompt, fetch/clean and extraction together.
+
+Each workflow directory now contains progress.jsonl, appended at stage start
+and finish, and workflow.json with per-round modules and total timing.
+Timestamps use UTC ISO 8601. elapsed_seconds uses a monotonic clock;
+user_wait_seconds measures time inside input prompts, including review choices;
+processing_seconds excludes that input wait but includes model/network waits.
+The timer begins after initial category/reviewer/access setup. Stage file I/O
+outside the timed blocks contributes to total time, so stage sums need not equal
+the workflow total. Timing is local to this invocation, not historical source runs.
+Imported results are marked reused; skipped, deferred, not_executed, interrupted
+and failed stages are distinguished. Reuse durations measure only local handling.
+All previously saved workflow records remain unchanged.
+
+The stopwatch refreshes one console line every half second in an interactive
+terminal. It pauses drawing while you type (elapsed time continues counting),
+then resumes after input. Redirected output or consoles without TTY support
+receive plain step labels without animation. No precise timestamps or JSON
+progress objects are printed to the terminal. Human-review evidence cards and
+questions remain visible. The final summary includes total and per-stage times.

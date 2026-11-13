@@ -14,6 +14,7 @@ from .scoring import score_result, apply_scores
 from .reasoning import reason_result, apply_reasoning
 from .review import run_review, write_json
 from .crm import write_review
+from .workflow_trace import WorkflowTrace
 
 
 def feedback_prompt(base, events, clarification):
@@ -30,72 +31,109 @@ async def run_workflow(request, reviewer, folder, db_path, max_rounds=2,
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=False)
     summary = {'workflow_id': folder.name, 'rounds': [], 'status': 'running'}
+    trace = WorkflowTrace(folder, summary, say, ask)
+    ask = trace.prompt
+    say = trace.message
     base_prompt = request.prompt
     try:
         for number in range(1, max_rounds + 1):
             prefix = folder / f'round-{number}'
             record = {'round': number}
             summary['rounds'].append(record)
-            if initial is not None:
-                result, initial = initial, None
-            else:
-                result = await execute(request)
+            with trace.stage(record, 'module_1') as progress:
+                if initial is not None:
+                    result, initial = initial, None
+                    progress['status'] = 'reused'
+                else:
+                    result = await execute(request)
+                    progress['status'] = result.get('status', 'completed')
+                progress['result_summary'] = {
+                    'documents':len(result.get('documents', [])), 'signals':len(result.get('signals', [])),
+                    'errors':len(result.get('errors', [])), 'stop_reason':result.get('stop_reason'),
+                    'coverage':result.get('coverage', {}),
+                    'diagnostics':result.get('signal_diagnostics', {})}
             write_json(Path(str(prefix)+'-research.json'), result)
             record['run_id'] = result.get('run_id')
             if result.get('status') in ('failed', 'needs_clarification'):
-                questions = result.get('stages', {}).get('receive_prompt', {}).get('result', {}).get('questions', [])
-                say('Research needs attention: ' + json.dumps(questions or result.get('errors', [])))
-                clarification = ask('Clarify the request (blank = stop): ').strip() if number < max_rounds else ''
-                if not clarification:
-                    summary['status'] = 'research_needs_attention'; break
-                request = RunRequest.model_validate({**request.model_dump(), 'prompt':base_prompt+'\nClarification: '+clarification, 'resume_run_id':None})
-                if ask('Start a fresh paid research round? [y/N]: ').strip().lower() != 'y':
-                    summary['status'] = 'stopped'; break
-                continue
-            if 'filter_score' not in result:
-                result = apply_scores(result, score_result(result))
+                with trace.stage(record, 'clarify_rerun') as progress:
+                    questions = result.get('stages', {}).get('receive_prompt', {}).get('result', {}).get('questions', [])
+                    say('Research needs attention: ' + json.dumps(questions or result.get('errors', [])))
+                    clarification = ask('Clarify the request (blank = stop): ').strip() if number < max_rounds else ''
+                    if not clarification:
+                        summary['status'] = 'research_needs_attention'; break
+                    request = RunRequest.model_validate({**request.model_dump(), 'prompt':base_prompt+'\nClarification: '+clarification, 'resume_run_id':None})
+                    if ask('Start a fresh paid research round? [y/N]: ').strip().lower() != 'y':
+                        summary['status'] = 'stopped'; break
+                    continue
+            with trace.stage(record, 'module_2') as progress:
+                if 'filter_score' not in result:
+                    result = apply_scores(result, score_result(result))
+                else:
+                    progress['status'] = 'reused'
+                progress['result_summary'] = {'accounts':len(result.get('filter_score', {}).get('accounts', []))}
             write_json(Path(str(prefix)+'-scored.json'), result)
-            if 'llm_reasoning' not in result:
-                say('Module 3 makes paid model calls, including retries; its cost is outside the research dollar cap.')
-                if ask('Run paid reasoning now? [y/N]: ').strip().lower() != 'y':
-                    summary['status'] = 'reasoning_deferred'; break
-                result = apply_reasoning(result, await reason_result(result))
+            with trace.stage(record, 'module_3') as progress:
+                if 'llm_reasoning' not in result:
+                    say('Module 3 makes paid model calls, including retries; its cost is outside the research dollar cap.')
+                    if ask('Run paid reasoning now? [y/N]: ').strip().lower() != 'y':
+                        progress['status'] = 'deferred'
+                        summary['status'] = 'reasoning_deferred'; break
+                    result = apply_reasoning(result, await reason_result(result))
+                else:
+                    progress['status'] = 'reused'
+                reasoning = result['llm_reasoning']
+                progress['result_summary'] = {'accounts':len(reasoning.get('accounts', [])),
+                    'validation':reasoning.get('validation', {}), 'summary':reasoning.get('summary', '')}
             write_json(Path(str(prefix)+'-reasoned.json'), result)
-            review = run_review(result, reviewer, ask=ask, say=say)
+            with trace.stage(record, 'module_4') as progress:
+                review = run_review(result, reviewer, ask=ask, say=say)
+                progress['status'] = 'completed' if review['complete'] else 'interrupted'
+                progress['result_summary'] = {'decisions':review.get('summary', {}),
+                    'reviewed':review.get('accounts_reviewed', len(review['events'])),
+                    'approved_queue':len(review['crm_queue'])}
             review_path = Path(str(prefix)+'-reviewed.json')
             write_json(review_path, review)
             record['review_file'] = str(review_path)
             if not review['complete']:
                 summary['status'] = 'review_incomplete'; break
-            if review['crm_queue']:
-                say(f"Approved queue: {len(review['crm_queue'])}; SQLite database: {db_path}")
-                if ask('Write these approved records to local CRM? [y/N]: ').strip().lower() == 'y':
-                    written, skipped = write_review(review, db_path)
-                    record['crm'] = {'written':written,'skipped':skipped,'database':str(db_path)}
-                    write_json(Path(str(prefix)+'-crm-receipt.json'), record['crm'])
-                else:
-                    record['crm'] = {'status':'deferred'}
-            pending = [e for e in review['events'] if e['decision'] in ('reject','defer','merge')]
-            if not pending:
-                summary['status'] = 'completed'; break
-            write_json(Path(str(prefix)+'-feedback.json'), {'events':pending})
-            say('Reject/defer/merge decisions saved. Merge does not automatically combine entities.')
-            if number == max_rounds:
-                summary['status'] = 'round_limit'; break
-            if ask('Clarify and research these decisions again? [y/N]: ').strip().lower() != 'y':
-                summary['status'] = 'feedback_saved'; break
-            clarification = ask('What evidence or correction should the next research round seek? ').strip()
-            if not clarification:
-                summary['status'] = 'feedback_saved'; break
-            extra = ask('Optional public evidence URL for the next round (blank = keep sources): ').strip()
-            values = {**request.model_dump(), 'prompt':feedback_prompt(base_prompt,pending,clarification),
-                      'resume_run_id':None}
-            if extra:
-                values['additional_urls'] = list(dict.fromkeys([*request.additional_urls,extra]))
-            request = RunRequest.model_validate(values)
-            say('Next round uses the same selected source categories plus any added URL. Prior approvals are not reused.')
-            if ask('Confirm source access permissions and start a fresh paid round? [y/N]: ').strip().lower() != 'y':
-                summary['status'] = 'feedback_saved'; break
+            with trace.stage(record, 'crm') as progress:
+                if review['crm_queue']:
+                    say(f"Approved queue: {len(review['crm_queue'])}; SQLite database: {db_path}")
+                    if ask('Write these approved records to local CRM? [y/N]: ').strip().lower() == 'y':
+                        written, skipped = write_review(review, db_path)
+                        record['crm'] = {'written':written,'skipped':skipped,'database':str(db_path)}
+                        write_json(Path(str(prefix)+'-crm-receipt.json'), record['crm'])
+                    else:
+                        record['crm'] = {'status':'deferred'}
+                progress['status'] = 'completed' if record.get('crm', {}).get('status') != 'deferred' else 'deferred'
+                if not review['crm_queue']:
+                    progress['status'] = 'skipped'
+                progress['result_summary'] = record.get('crm', {'reason':'No approved queue items.'})
+            with trace.stage(record, 'clarify_rerun') as progress:
+                pending = [e for e in review['events'] if e['decision'] in ('reject','defer','merge')]
+                if not pending:
+                    progress['status'] = 'skipped'
+                    summary['status'] = 'completed'; break
+                progress['result_summary'] = {'feedback_items':len(pending), 'next_round':None}
+                write_json(Path(str(prefix)+'-feedback.json'), {'events':pending})
+                say('Reject/defer/merge decisions saved. Merge does not automatically combine entities.')
+                if number == max_rounds:
+                    summary['status'] = 'round_limit'; break
+                if ask('Clarify and research these decisions again? [y/N]: ').strip().lower() != 'y':
+                    summary['status'] = 'feedback_saved'; break
+                clarification = ask('What evidence or correction should the next research round seek? ').strip()
+                if not clarification:
+                    summary['status'] = 'feedback_saved'; break
+                extra = ask('Optional public evidence URL for the next round (blank = keep sources): ').strip()
+                values = {**request.model_dump(), 'prompt':feedback_prompt(base_prompt,pending,clarification),
+                          'resume_run_id':None}
+                if extra:
+                    values['additional_urls'] = list(dict.fromkeys([*request.additional_urls,extra]))
+                request = RunRequest.model_validate(values)
+                say('Next round uses the same selected source categories plus any added URL. Prior approvals are not reused.')
+                if ask('Confirm source access permissions and start a fresh paid round? [y/N]: ').strip().lower() != 'y':
+                    summary['status'] = 'feedback_saved'; break
+                progress['result_summary'] = {'next_round':number+1, 'feedback_items':len(pending)}
         return summary
     except (KeyboardInterrupt, EOFError, asyncio.CancelledError):
         summary['status'] = 'interrupted'
@@ -104,6 +142,7 @@ async def run_workflow(request, reviewer, folder, db_path, max_rounds=2,
         summary.update(status='failed', error=str(exc))
         raise
     finally:
+        trace.finish()
         write_json(folder/'workflow.json', summary)
         say(f'Workflow records: {folder.resolve()}')
 
