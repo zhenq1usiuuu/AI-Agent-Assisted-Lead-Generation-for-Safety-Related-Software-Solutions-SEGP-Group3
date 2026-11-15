@@ -1,0 +1,81 @@
+{
+  "workspace_verified": false,
+  "company": {
+    "resource": "companies",
+    "fields": {
+      "name": "name",
+      "external_key": "external_key"
+    }
+  },
+  "opportunity": {
+    "resource": "opportunities",
+    "fields": {
+      "name": "name",
+      "company_id": "companyId",
+      "grade": "grade",
+      "score": "score"
+    }
+  },
+  "signal": {
+    "resource": "leadSignals",
+    "fields": {
+      "company_id": "companyId",
+      "source_url": "source_url",
+      "excerpt": "excerpt",
+      "published_at": "published_at",
+      "captured_at": "captured_at",
+      "content_hash": "content_hash",
+      "source_class": "source_class",
+      "source_title": "source_title",
+      "confidence": "confidence"
+    }
+  },
+  "review": {
+    "resource": "reviewEvents",
+    "fields": {
+      "company_id": "companyId",
+      "reviewer": "reviewer",
+      "decision": "decision",
+      "reason": "reason",
+      "reviewed_at": "reviewed_at"
+    }
+  },
+  "person": {
+    "resource": "people",
+    "fields": {
+      "company_id": "companyId",
+      "name": "name.firstName",
+      "job_title": "job_title",
+      "work_email": "emails.primaryEmail",
+      "phone": "phone",
+      "source_url": "source_url",
+      "captured_at": "captured_at",
+      "content_hash": "content_hash",
+      "excerpt": "excerpt",
+      "contact_permission": "contact_permission",
+      "permission_timestamp": "permission_timestamp",
+      "permission_evidence": "permission_evidence",
+      "do_not_contact": "do_not_contact",
+      "storage_basis": "storage_basis"
+    }
+  },
+  "contact_route": {
+    "resource": "businessContactRoutes",
+    "fields": {
+      "company_id": "companyId",
+      "name": "name",
+      "job_title": "job_title",
+      "work_email": "work_email",
+      "phone": "phone",
+      "source_url": "source_url",
+      "captured_at": "captured_at",
+      "content_hash": "content_hash",
+      "excerpt": "excerpt",
+      "contact_permission": "contact_permission",
+      "permission_timestamp": "permission_timestamp",
+      "permission_evidence": "permission_evidence",
+      "do_not_contact": "do_not_contact",
+      "storage_basis": "storage_basis"
+    }
+  }
+}

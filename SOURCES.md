@@ -20,7 +20,7 @@ Updated 2026-10-21 following the user's review of the replacement shortlist. Thi
 | `sirim_directory` | [SIRIM Malaysian Certified directory](https://www.malaysiancertified.com.my/index.jsp) | certification | html / context_only | lead_evidence |
 | `ftse4good_factsheet` | [FTSE4Good Bursa Malaysia factsheet](https://research.ftserussell.com/Analytics/FactSheets/Home/DownloadSingleIssue?issueName=F4GBM&openfile=open) | esg_index | pdf / records | lead_evidence |
 | `bursa_indices` | [Bursa Malaysia indices and ESG information](https://www.bursamalaysia.com/trade/our_products_services/indices/ftse_bursa_malaysia_indices/overview) | esg_index | html / context_only | lead_evidence |
-| `dosh_prosecution` | [DOSH prosecution records](https://dosh.gov.my/en/pendakwaan/) | regulatory | html / records | lead_evidence |
+| `dosh_prosecution` | [DOSH prosecution records](https://dosh.gov.my/my/dashboard/laporan-pendakwaan-dan-kompaun/) | regulatory | html / records | lead_evidence |
 | `dosh_enforcement_dashboard` | [DOSH prosecution and compound dashboard](https://dosh.gov.my/en/dashboard/laporan-pendakwaan-dan-kompaun/) | regulatory | manual / context_only | lead_evidence |
 | `dosh_fatal_cases` | [DOSH fatal accident cases](https://dosh.gov.my/en/kes-kemalangan-maut/) | regulatory | html / records | lead_evidence |
 | `fmm_newsroom` | [FMM newsroom](https://www.fmm.org.my/Articles/Newsroom) | industry_procurement | html / context_only | lead_evidence |
@@ -90,3 +90,17 @@ FMM Business in Action Vol. 2/2025 contains a download button but no public PDF 
 ## Remediation implementation
 
 See [REMEDIATION.md](REMEDIATION.md) for the latest connector probe, PDF/OCR, multi-layer retrieval and chunk/resume verification. Public wrapper inspection is implemented; this is not a claim that SIRIM certificate queries or the cross-host DOSH dashboard are fully accessible. Reference-only hosts remain excluded. No source URL was silently replaced.
+
+## Access recheck: 2026-11-14
+
+`dosh_prosecution` now points to the official Malay prosecution/compound dashboard,
+not the removed /en/pendakwaan/ page (404). Both DOSH dashboard entries are manual,
+context-only sources containing an observed external Power BI embed. The fatal
+cases page still reports missing records. No replacement company table was found.
+
+SIRIM ordinary HTTP diagnostics returned homepage 200 / robots 404, while the
+production pinned-IP fetcher subsequently received robots 500. Access is therefore
+request-path dependent or intermittent, not verified as restored. Preserve fail-
+closed behavior. Anonymous navigation through the site's published ProductSearch
+POST returned a member login page. The current adapter does not authenticate.
+Use `python -m app.source_check --permissions-confirmed` for fresh diagnostics.

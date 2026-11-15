@@ -26,7 +26,8 @@ def feedback_prompt(base, events, clarification):
 
 
 async def run_workflow(request, reviewer, folder, db_path, max_rounds=2,
-                       initial=None, ask=input, say=print):
+                       initial=None, ask=input, say=print, contact_manifest=None,
+                       auto_contacts=False, contact_budget_usd=1.0):
     """Save each boundary. Each rerun is a new bounded research run, never an approval."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=False)
@@ -34,6 +35,8 @@ async def run_workflow(request, reviewer, folder, db_path, max_rounds=2,
     trace = WorkflowTrace(folder, summary, say, ask)
     ask = trace.prompt
     say = trace.message
+    from .budget import COST_REPORTER
+    cost_token = COST_REPORTER.set(say)
     base_prompt = request.prompt
     try:
         for number in range(1, max_rounds + 1):
@@ -52,6 +55,10 @@ async def run_workflow(request, reviewer, folder, db_path, max_rounds=2,
                     'errors':len(result.get('errors', [])), 'stop_reason':result.get('stop_reason'),
                     'coverage':result.get('coverage', {}),
                     'diagnostics':result.get('signal_diagnostics', {})}
+            for category in result.get('category_summary', []):
+                say(f"{category['category']}: {category['documents']} documents, "
+                    f"{category['processed_chunks']} chunks processed, {category['remaining_chunks']} pending, "
+                    f"{category['signals']} signals ({category['status']}).")
             write_json(Path(str(prefix)+'-research.json'), result)
             record['run_id'] = result.get('run_id')
             if result.get('status') in ('failed', 'needs_clarification'):
@@ -91,6 +98,29 @@ async def run_workflow(request, reviewer, folder, db_path, max_rounds=2,
                 progress['result_summary'] = {'decisions':review.get('summary', {}),
                     'reviewed':review.get('accounts_reviewed', len(review['events'])),
                     'approved_queue':len(review['crm_queue'])}
+            if review['complete'] and review['crm_queue'] and (contact_manifest is not None or auto_contacts):
+                from .contacts import discover_contacts, review_contacts
+                with trace.stage(record, 'contacts') as progress:
+                    if auto_contacts and contact_manifest is None:
+                        say(f'Contact discovery: up to 5 paid searches and 20 pages; model cap USD {contact_budget_usd:.2f} per round. Search fees are separate from model/research caps.')
+                        if ask('Search public business contacts now? [y/N]: ').strip().lower() == 'y':
+                            from .contact_discovery import discover_automatic
+                            from .budget import EvaluationBudget
+                            budget = EvaluationBudget(Path(str(prefix)+'-contact-budget.json'), contact_budget_usd)
+                            discovery = await discover_automatic(review['crm_queue'], budget, ask=ask, say=say)
+                            write_json(Path(str(prefix)+'-contacts.json'), discovery)
+                            say(f"Found {len(discovery['candidates'])} contact candidates; {len(discovery['errors'])} retrieval/extraction issues. See the contacts JSON for details.")
+                            review['contact_reviews'] = review_contacts(discovery, reviewer, ask, say)
+                            progress['result_summary'] = {'candidates':len(discovery['candidates']), 'approved':len(review['contact_reviews']), 'errors':discovery['errors']}
+                        else:
+                            progress['status'] = 'deferred'
+                    elif contact_manifest.get('sources') and ask('Reviewed contact-page terms and public access permissions? [y/N]: ').strip().lower()!='y':
+                        progress['status']='deferred'
+                    else:
+                        discovery=await discover_contacts(contact_manifest,review['crm_queue'])
+                        write_json(Path(str(prefix)+'-contacts.json'),discovery)
+                        review['contact_reviews']=review_contacts(discovery,reviewer,ask,say)
+                        progress['result_summary']={'candidates':len(discovery['candidates']),'approved':len(review['contact_reviews']),'errors':discovery['errors']}
             review_path = Path(str(prefix)+'-reviewed.json')
             write_json(review_path, review)
             record['review_file'] = str(review_path)
@@ -142,6 +172,7 @@ async def run_workflow(request, reviewer, folder, db_path, max_rounds=2,
         summary.update(status='failed', error=str(exc))
         raise
     finally:
+        COST_REPORTER.reset(cost_token)
         trace.finish()
         write_json(folder/'workflow.json', summary)
         say(f'Workflow records: {folder.resolve()}')
@@ -149,6 +180,9 @@ async def run_workflow(request, reviewer, folder, db_path, max_rounds=2,
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Run all modules in one terminal session, with human review and optional local CRM.')
+    parser.add_argument('--contacts-file', type=Path, help='Optional contact evidence / explicit company contact-page manifest.')
+    parser.add_argument('--skip-contacts', action='store_true', help='Skip automatic public contact discovery.')
+    parser.add_argument('--contact-budget-usd', type=float, default=1.0, help='Per-round contact model reservation cap; search fees are separate.')
     parser.add_argument('--categories')
     parser.add_argument('--reviewer')
     parser.add_argument('--from-result', type=Path, help='Continue from an exported research/scored/reasoned JSON (not a checkpoint wrapper).')
@@ -159,6 +193,8 @@ def main(argv=None):
     parser.add_argument('--ocr', action='store_true')
     parser.add_argument('--db', type=Path, default=ROOT/'data/crm.db')
     args = parser.parse_args(argv)
+    if not 0 < args.contact_budget_usd <= 10:
+        parser.error('--contact-budget-usd must be greater than 0 and at most 10.')
     load_dotenv(ROOT/'.env')
     try:
         initial = json.loads(args.from_result.read_text(encoding='utf-8-sig')) if args.from_result else None
@@ -180,7 +216,7 @@ def main(argv=None):
                 return 0
         request = request.model_copy(update={'permissions_confirmed':True})
         folder = ROOT/'data/workflows'/str(uuid4())
-        asyncio.run(run_workflow(request, reviewer, folder, args.db, args.max_rounds, initial))
+        asyncio.run(run_workflow(request, reviewer, folder, args.db, args.max_rounds, initial, contact_manifest=json.loads(args.contacts_file.read_text(encoding='utf-8-sig')) if args.contacts_file else None, auto_contacts=not args.skip_contacts, contact_budget_usd=args.contact_budget_usd))
         return 0
     except (KeyboardInterrupt, EOFError):
         print('Stopped. Completed stage files are retained.'); return 130

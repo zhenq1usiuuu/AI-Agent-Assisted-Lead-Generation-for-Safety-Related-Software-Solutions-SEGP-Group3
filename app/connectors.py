@@ -9,6 +9,7 @@ def inspect_public_source(html, url, source_id=None, query=None):
     host = urlsplit(url).hostname
     targets = []
     limitations = []
+    external_embeds = []
     for node in soup.select('iframe[src], embed[src], object[data]'):
         target = urljoin(url, node.get('src') or node.get('data') or '')
         parsed = urlsplit(target)
@@ -16,7 +17,15 @@ def inspect_public_source(html, url, source_id=None, query=None):
             targets.append({'url':target,'kind':'embedded_public_document','label':'Embedded public document'})
         else:
             limitations.append('Embedded content is outside the selected exact host; no automatic cross-host access.')
+            if parsed.scheme == 'https' and not parsed.username:
+                external_embeds.append({'url':target,'provider':'powerbi' if parsed.hostname=='app.powerbi.com' else 'external',
+                                        'status':'requires_connector'})
     if source_id == 'sirim_directory':
+        if soup.select('input[type="password"]'):
+            limitations.append('login_required: the directory returned a member login form; no company records extracted.')
+            return {'targets':[], 'limitations':limitations, 'observed_table_count':0, 'external_embeds':external_embeds}
+        if soup.select('[data-onclick="onProductSearch"]'):
+            limitations.append('interactive_directory: product search uses JavaScript/POST navigation. Anonymous navigation returned a member login page on 2026-11-14; no authenticated adapter is configured.')
         submitted = False
         for form in soup.find_all('form'):
             action = urljoin(url, form.get('action') or url)
@@ -58,4 +67,4 @@ def inspect_public_source(html, url, source_id=None, query=None):
                 targets.append({'url':target,'kind':'public_get_search' if source_id=='sirim_directory' else 'public_pagination','label':label})
     unique = list({item['url']:item for item in targets}.values())
     return {'targets':unique[:20], 'limitations':list(dict.fromkeys(limitations)),
-            'observed_table_count':len(soup.find_all('table'))}
+            'observed_table_count':len(soup.find_all('table')), 'external_embeds':external_embeds}

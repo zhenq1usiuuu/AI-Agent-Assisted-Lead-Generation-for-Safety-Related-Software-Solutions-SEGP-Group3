@@ -101,7 +101,7 @@ python -m app.cli --source fmm_newsroom --prompt "Review public FMM workplace-sa
 
 Live runs automatically save `data/runs/<run_id>/checkpoint.json` and their budget ledger. This is a change from the earlier prototype that saved results only on request. Local checkpoints contain source text, prompt, outputs and unfinished work, but no API key. `--output` remains an optional export. Retain these files only as permitted by source conditions.
 
-The run guard reserves a conservative byte-based input allowance and maximum output cost before each paid attempt. Returned complete usage settles that attempt at a conservative rate ($6/M input, $15/M output); uncertain failures keep their full reservation. Reported estimates also account for default cache hits. Reservations/committed bounds are not actual charges, and may stop a run early. The provider invoice is authoritative. The per-run lock prevents simultaneous resumes. Separate run IDs have separate caps; this is not an account-wide spending limit.
+The run guard reserves a conservative byte-based input allowance and maximum output cost before each paid attempt. Returned complete usage settles that attempt at a conservative rate ($6/M input, $15/M output); uncertain failures keep their full reservation. Settlement releases unused reservations and records the cache billing breakdown. Reservations/committed bounds are not actual charges, and may stop a run early. The provider invoice is authoritative. The per-run lock prevents simultaneous resumes. Separate run IDs have separate caps; this is not an account-wide spending limit.
 
 Budget, page, chunk or time limits preserve completed work. Resume using the run ID printed in JSON:
 
@@ -368,3 +368,176 @@ then resumes after input. Redirected output or consoles without TTY support
 receive plain step labels without animation. No precise timestamps or JSON
 progress objects are printed to the terminal. Human-review evidence cards and
 questions remain visible. The final summary includes total and per-stage times.
+
+## Business contacts and Twenty (2026-11-13)
+
+Company approval and person/contact approval are separate decisions. Missing
+contacts never block saving a company. No emails, calls or messages are sent.
+
+### Automatic public contact discovery
+
+Run the full pipeline without preparing a contacts JSON file:
+
+```powershell
+python -m app.cli --full --reviewer "Will" --contact-budget-usd 1 --max-rounds 1
+```
+
+After company review, approve the paid contact search prompt. The program searches
+for each approved company's website using the same MOONSHOT_API_KEY, lists actual
+search results, and asks you to select the verified company website and confirm
+its access terms. It fetches that page and observed same-host contact/about/team
+links with the existing robots, public-IP, rate and size protections. Search
+snippets alone are never contact evidence. Contact footers and mailto/tel values
+are retained. Kimi extracts published names, roles, work emails and business
+phones; missing fields remain null. General company routes remain separate from
+named individuals. Each populated field must occur verbatim in its source quote.
+Company identity must appear on the same fetched page; strict name matching can
+miss abbreviated or rebranded companies. JavaScript-only and image-only contacts
+are not automatically resolved. This is bounded discovery, not whole-site coverage.
+
+Review each candidate and its company association, supply a storage basis, and
+approve the final CRM write. Approved contacts are written to SQLite together
+with evidence and review records. Rejecting a contact does not block its company.
+Public visibility is not marketing consent: unknown/denied defaults to
+ do_not_contact=true. No outreach is sent. Never fabricate data to fill gaps.
+
+Limits per round: five approved companies, one search per company, four fetched
+pages per company, eight local text windows per page, and ten candidate contacts
+per model response. Remaining companies and errors are recorded in
+round-N-contacts.json. The separate model reservation cap defaults to USD 1;
+search API fees are billed separately and bounded by the five-call limit.
+The research and reasoning budgets are unchanged. Contact model reservations
+and returned usage are saved in round-N-contact-budget.json. No automatic search
+retries occur. Unsupported API access produces an explicit error and no invented
+contacts. API availability depends on the account/provider.
+
+Search API reference: https://platform.kimi.ai/docs/guide/best-practices-for-web-search
+The implementation uses POST /v1/tools/search with include_content=false.
+Use --skip-contacts to skip automatic discovery. Optional --contacts-file still
+supports explicit URLs/general inbox extraction or supplied verbatim evidence
+(config/contacts.example.json); it overrides automatic discovery and does not
+make contact-model calls. Example entries are synthetic and must not enter CRM.
+Use --from-result only with an existing exported research/scored/reasoned JSON.
+
+To inspect stored contacts from the project terminal:
+
+```powershell
+python -c "import sqlite3; c=sqlite3.connect('data/crm.db'); print(c.execute('SELECT account_key,name,job_title,work_email,phone,do_not_contact FROM contacts').fetchall()); c.close()"
+```
+
+New SQLite tables: companies, contacts, contact_evidence and contact_review_events.
+Existing leads and their records are preserved. Companies and contacts are linked
+by account_key; company routes and named people are distinguished by kind.
+Newer approved contact decisions update the contact while retaining review history;
+unknown/denied states cannot activate contact. The same submitted evidence is
+not duplicated. Sources stay in separate evidence rows; full source_text is kept
+in local workflow JSON, not copied to the contact database table. Protect and
+retain local JSON only as appropriate for its data. Rejected candidates are not
+inserted as contacts. Existing company conflict behavior remains unchanged.
+
+### Twenty adapter
+
+The local SQLite flow works without Twenty. To connect a self-hosted instance,
+configure TWENTY_BASE_URL (HTTPS origin) and TWENTY_API_KEY in .env. Copy
+config/twenty.mapping.example.json into a local data/ mapping and verify every
+resource and field against your own workspace Settings -> Developers -> API.
+The example is NOT a ready-to-use workspace schema. Create the required custom
+fields/objects first; the adapter does not modify metadata. Dot notation maps
+composite fields, e.g. name.firstName and emails.primaryEmail. The full sourced
+name is preserved in the firstName example rather than guessing family names.
+Phone/custom permission fields must be adapted to your workspace's real types.
+
+Mappings cover Company, Person, Opportunity, Lead Signal, Review Event and a
+custom Business Contact Route object for general company inboxes. Evidence and
+permission fields must be mapped, not silently dropped. Contacts must belong to
+approved companies and pass the same local evidence/approval checks before export.
+Old review files may lack full signal provenance; do not invent missing values.
+
+```powershell
+# Local export plan only; no network or API key needed.
+python -m app.twenty data/reviewed-with-contacts.json --mapping data/twenty.mapping.json --out data/twenty-plan.json
+# After inspecting the plan and verifying schema, set workspace_verified=true.
+# This command actually sends business/contact data to your configured Twenty.
+python -m app.twenty data/reviewed-with-contacts.json --mapping data/twenty.mapping.json --out data/twenty-receipt.json --apply
+```
+
+Use the new round-*-reviewed.json generated by your workflow as the input above.
+The adapter uses deterministic UUIDs and GET/create-or-PATCH per record, saves
+confirmed remote IDs to a receipt after each operation, and stops on uncertain
+errors. The target workspace must support caller-supplied IDs and these REST
+operations. No automatic retry of an uncertain write occurs. Subsequent explicit
+runs look up the same ID before writing. Multi-object writes are NOT a remote
+transaction: earlier successes remain if a later write fails. Keep the receipt
+and retry the same reviewed data after resolving the cause. Do not sync concurrent
+runs for the same accounts or replay an older consent state over a newer one.
+Use a separate test workspace for synthetic examples.
+
+Official schema and authentication reference:
+https://docs.twenty.com/developers/extend/api
+The connector has mock-HTTP coverage; live Twenty validation requires your actual
+workspace URL, credentials and verified mapping. It is a separate explicit export,
+not an automatic network side effect of approving a company in the terminal.
+
+## Usage settlement and category coverage
+
+The default budget is unchanged. Before every model attempt, the ledger reserves
+conservatively for that request. A successful response settles using its actual
+Chat Completions usage: uncached input, cache reads, 5m/1h cache writes, and output
+are separate billing buckets. Cache writes are not counted again as uncached
+input. Cache-write response headers identify mixed TTLs when supplied; otherwise
+the recorded request TTL applies (5m by default). Missing/invalid usage and
+uncertain failed attempts retain reservations. Valid usage is recorded even if
+subsequent JSON/schema validation fails. Existing ledgers with retained usage
+are recalculated on load; no historical calls are erased.
+
+The unified terminal prints Estimated used, Next reservation, Unresolved
+reservations, and Model budget in USD. The estimate is not an invoice and does
+not include search API fees or unmetered Module 3 charges. The next reservation
+is a preflight upper-bound estimate, not money already spent. A request can still
+be blocked when its reservation exceeds the remaining cap.
+
+K3 rates used (USD per million tokens): uncached 3, cache read 0.3, cache write
+5m 3 / 1h 6, output 15. Reference checked 2026-11-14:
+https://www.kimi.ai/academy/best-practices-for-context-caching
+
+Extraction now cycles across retained source categories, taking one chunk from
+each before returning to the same category. Evidence-rich chunks remain first
+within their category. This minimum first-pass scheduling opportunity is subject
+to the global budget; it is not a promise of one paid call per category. Terminal
+and JSON category summaries distinguish processed/pending chunks and signals.
+No extractable chunks does not mean the whole website has no relevant companies.
+DOSH dashboard/404 and SIRIM robots restrictions remain access limitations; these
+changes do not bypass controls or claim to repair unavailable upstream sources.
+
+## DOSH / SIRIM access recheck (2026-11-14)
+
+The legacy DOSH prosecution URL returned 404 and has been replaced by the
+verified official Malay prosecution/compound dashboard. Both dashboard entries
+are context-only: the live page embeds app.powerbi.com, not a static case table.
+The connector records the exact observed external embed for review, without
+silently expanding allowed hosts or claiming its records have been downloaded.
+
+SIRIM's homepage returned 200 and robots.txt returned 404 on this check; the old
+robots 500 is not a permanent site condition. Its published menu.js uses POST
+ProductSearch navigation to search.aspx. A fresh anonymous session following
+that navigation received MEMBER LOGIN, with a password field. No login bypass,
+credential collection or authenticated search was implemented. An explicit GET
+query alone cannot fix this current directory flow. Public company certificates
+can still be supplied as additional source URLs, subject to ordinary validation.
+
+Run a fresh diagnostic using production robots/IP/rate checks (no Kimi calls):
+
+```powershell
+python -m app.source_check --permissions-confirmed
+```
+
+The report is saved to data/source-health.json. Results distinguish reachable
+wrappers, external connectors, interactive directories, missing records and
+fetch failures. These are observations at capture time, not guarantees of future
+availability. Manual official exports are not automatically imported by this
+command. Neither directory currently guarantees automatic company records.
+
+Production verification on the same date still received SIRIM robots HTTP 500,
+although ordinary HTTP diagnostics received 404. Treat access as intermittent or
+request-path dependent; the production fetcher continues to fail closed. The
+stored source-health report is the production result, not a claim of restoration.

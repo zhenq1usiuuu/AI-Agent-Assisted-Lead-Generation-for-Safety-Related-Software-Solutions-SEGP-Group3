@@ -8,6 +8,7 @@ import sys
 import threading
 
 STAGES = {
+    'contacts': 'Discover only sourced business contacts and obtain separate human storage and permission decisions.',
     'module_1': 'Interpret the request, fetch permitted sources, clean text and extract evidence-backed signals.',
     'module_2': 'Apply deterministic entity grouping, evidence gates and the scoring rubric.',
     'module_3': 'Explain the supplied evidence and scores, then validate the model response.',
@@ -18,6 +19,7 @@ STAGES = {
 
 
 LABELS = {
+    'contacts': 'Checking and reviewing business contacts...',
     'module_1': 'Fetching and extracting signals...',
     'module_2': 'Filtering and scoring companies...',
     'module_3': 'Analyzing evidence and preparing recommendations...',

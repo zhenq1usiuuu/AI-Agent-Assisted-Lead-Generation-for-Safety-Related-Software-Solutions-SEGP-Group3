@@ -303,6 +303,31 @@ def finish(state,output):
         'total_leaf_chunks':len(leaf),'truncated_documents':truncated,'retrieval_complete':not state.get('queue'),
         'scope_complete':not state.get('queue') and not any(e['stage']=='fetch_clean' for e in output['errors']),
         'pending_review':pending_review,'completion_definition':'All retained eligible text chunks processed; not a guarantee of model recall or whole-site coverage.'}
+    from .selection import CATEGORIES
+    category_names = {value[0]: name for name, value in CATEGORIES.items()}
+    summaries = {}
+    for source_id in output.get('request', {}).get('source_ids', []):
+        source = SOURCE_BY_ID[source_id]
+        category = source['source_class']
+        summaries.setdefault(category, {'category':category_names.get(category, category),
+            'documents':0, 'processed_chunks':0, 'remaining_chunks':0, 'signals':0})
+    doc_classes = {d['document_id']:d.get('source_class', 'unknown') for d in output['documents']}
+    for category in set(doc_classes.values()):
+        summaries.setdefault(category, {'category':category_names.get(category, category),
+            'documents':0, 'processed_chunks':0, 'remaining_chunks':0, 'signals':0})
+    for doc in output['documents']:
+        summaries[doc_classes[doc['document_id']]]['documents'] += 1
+    for chunk in leaf:
+        row = summaries[doc_classes[chunk['document_id']]]
+        row['processed_chunks' if chunk['status']=='completed' else 'remaining_chunks'] += 1
+    for signal in output['signals']:
+        category = doc_classes.get(signal['document_id'])
+        if category in summaries:
+            summaries[category]['signals'] += 1
+    for row in summaries.values():
+        row['status'] = ('pending_extraction' if row['remaining_chunks'] else
+                         'no_extractable_chunks' if not row['processed_chunks'] else 'retained_chunks_processed')
+    output['category_summary'] = list(summaries.values())
     output['remaining_chunks']=[{k:c[k] for k in ('chunk_id','document_id','start','end','status')} for c in remaining]
     output['signals'].sort(key=lambda s:(s['document_id'],s['evidence_start'],s['signal_id']))
     output['stages'].setdefault('fetch_clean',{'status':'not_started'})
@@ -317,7 +342,7 @@ def finish(state,output):
     if not eligible:
         reasons.append('no_extractable_documents: source pages failed or contain context only')
     if output.get('stop_reason')=='budget_limit':
-        reasons.append('budget_limit: resume this run with a higher cumulative cap')
+        reasons.append('budget_limit: inspect settled usage, unresolved reservations and the next-call reservation before deciding how to continue')
     if state.get('queue'):
         reasons.append('retrieval_limit: queued URLs remain; increase the page cap on resume')
     if truncated:

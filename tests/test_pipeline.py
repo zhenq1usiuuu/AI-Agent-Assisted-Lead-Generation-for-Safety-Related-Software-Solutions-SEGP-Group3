@@ -50,7 +50,7 @@ def test_live_orchestration_with_mocked_model_and_fetch(monkeypatch):
         async def generate(self,stage,payload,schema):
             calls.append(stage)
             if stage=='receive_prompt':
-                return Plan(status='ready',workflow='inspection',country='Malaysia',sectors=[],keywords=['inspection'],seed_ids=['dosh_prosecution'],questions=[],assumptions=[])
+                return Plan(status='ready',workflow='inspection',country='Malaysia',sectors=[],keywords=['inspection'],seed_ids=['dosh_fatal_cases'],questions=[],assumptions=[])
             doc=payload['document']
             return Extraction(signals=[{'document_id':doc['document_id'],'organisation':None,'organisation_specific':False,
                 'sector':None,'safety_topic':'inspection','trigger_type':'guidance','workflow':'inspection','urgency':None,
@@ -138,7 +138,7 @@ def test_kimi_payload_has_stable_prefix_tools_and_strict_schema(monkeypatch):
     from app.llm import KimiClient
     captured=[]
     monkeypatch.setenv('MOONSHOT_API_KEY','fake-test-value')
-    plan=Plan(status='ready',workflow='inspection',country='Malaysia',sectors=[],keywords=['inspection'],seed_ids=['dosh_prosecution'],questions=[],assumptions=[])
+    plan=Plan(status='ready',workflow='inspection',country='Malaysia',sectors=[],keywords=['inspection'],seed_ids=['dosh_fatal_cases'],questions=[],assumptions=[])
     async def send(self, request, **kwargs):
         import json
         captured.append(json.loads(request.content))

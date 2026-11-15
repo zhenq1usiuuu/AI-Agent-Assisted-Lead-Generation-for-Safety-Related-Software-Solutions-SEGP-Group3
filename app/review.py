@@ -109,7 +109,12 @@ def build_cards(result: dict) -> list[dict]:
                 source_class=s.get("source_class"), score=sc.get("score"),
                 total=sc.get("total"), gates=sc.get("gates", []),
                 buyer_role_hypothesis=s.get("buyer_role_hypothesis"),
-                verified_against_source=verified))
+                verified_against_source=verified,
+                captured_at=s.get('captured_at') or doc.get('captured_at'),
+                content_hash=s.get('content_hash') or doc.get('content_hash'),
+                source_title=s.get('source_title') or doc.get('title'),
+                confidence=s.get('confidence')))
+
         cards.append(dict(
             account_key=acc["account_key"], display_name=acc.get("display_name"),
             grade=acc.get("grade"), score=acc.get("score"), gates=acc.get("gates", []),
@@ -200,8 +205,8 @@ def review_card(card: dict, ask, say, reviewer: str, position: str = "") -> dict
         agrees_with_recommendation=agrees(decision, card["recommendation"]),
         grade=card["grade"], score=card["score"], gates=card["gates"],
         ai_validation=card["validation_status"], reviewed_at=now_iso(),
-        evidence=[{k: e[k] for k in ("signal_id", "source_url", "excerpt", "published_at",
-                                    "verified_against_source")} for e in card["evidence"]])
+        evidence=[{k: e.get(k) for k in ("signal_id", "source_url", "excerpt", "published_at",
+                                    "verified_against_source", "source_class", "captured_at", "content_hash", "source_title", "confidence")} for e in card["evidence"]])
 
 
 def build_crm_queue(events: list[dict], cards: list[dict]) -> list[dict]:

@@ -85,4 +85,15 @@ def prioritize_chunks(chunks, documents):
         rows = len(re.findall(r"(?m)^.*[A-Za-z].*\d[\d,]*\s+\d+\.\d+\s*$", text))
         events = len(re.findall(r"\b(?:accident|fatal|injur\w*|fined|prosecution|kemalangan|pendakwaan)\b", text, re.I))
         return -(companies * 3 + rows * 4 + events * 2)
-    return sorted(chunks, key=priority)
+    # Give each retained category one slot before its second slot. This is a
+    # scheduling floor, not permission to exceed the user's global budget.
+    groups = {}
+    for chunk in sorted(chunks, key=priority):
+        category = by_id[chunk['document_id']].get('source_class', 'unknown')
+        groups.setdefault(category, []).append(chunk)
+    ordered = []
+    while any(groups.values()):
+        for group in groups.values():
+            if group:
+                ordered.append(group.pop(0))
+    return ordered

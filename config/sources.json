@@ -1,7 +1,7 @@
 [
   {
     "purpose": "lead_evidence",
-    "reviewed_at": "2026-10-25",
+    "reviewed_at": "2026-11-14",
     "id": "sirim_directory",
     "title": "SIRIM Malaysian Certified directory",
     "url": "https://www.malaysiancertified.com.my/index.jsp",
@@ -9,7 +9,7 @@
     "connector": "html",
     "evidence_scope": "context_only",
     "follow_links": false,
-    "access_note": "Latest check 2026-10-25: robots HTTP 500; access stopped. Adapter supports only observed public unambiguous GET forms with an explicit source_query. Live query access remains unverified; POST/session/CAPTCHA connectors are unavailable.",
+    "access_note": "Homepage HTTP 200; robots HTTP 404 on 2026-11-14, replacing the historical HTTP 500 observation. Published menu.js submits ProductSearch to search.aspx using POST. Anonymous navigation returned MEMBER LOGIN with password input. No authenticated directory adapter is configured; landing page remains context only. The production pinned-IP fetcher subsequently received robots HTTP 500 on the same date; access remains intermittent or request-path dependent, not verified as restored.",
     "note": "Certification is scheme-, scope-, site- and status-specific. Landing text does not certify any named company."
   },
   {
@@ -40,20 +40,20 @@
   },
   {
     "purpose": "lead_evidence",
-    "reviewed_at": "2026-10-21",
+    "reviewed_at": "2026-11-14",
     "id": "dosh_prosecution",
-    "title": "DOSH prosecution records",
-    "url": "https://dosh.gov.my/en/pendakwaan/",
+    "title": "DOSH prosecution and compound dashboard (Malay)",
+    "url": "https://dosh.gov.my/my/dashboard/laporan-pendakwaan-dan-kompaun/",
     "source_class": "regulatory",
-    "connector": "html",
-    "evidence_scope": "records",
-    "follow_links": true,
-    "access_note": "Official navigation lists prosecution; verification timed out on 2026-10-21. Current table and historical completeness unverified.",
+    "connector": "manual",
+    "evidence_scope": "context_only",
+    "follow_links": false,
+    "access_note": "Legacy /en/pendakwaan/ returns HTTP 404. Official replacement is the public dashboard. It embeds Power BI on app.powerbi.com; no company records can be inferred from its wrapper. External dashboard adapter remains unavailable.",
     "note": "Record exact company, case date, law and stated outcome only when actually present. A charge is not a conviction; historical records do not establish current non-compliance."
   },
   {
     "purpose": "lead_evidence",
-    "reviewed_at": "2026-10-25",
+    "reviewed_at": "2026-11-14",
     "id": "dosh_enforcement_dashboard",
     "title": "DOSH prosecution and compound dashboard",
     "url": "https://dosh.gov.my/en/dashboard/laporan-pendakwaan-dan-kompaun/",
@@ -61,12 +61,12 @@
     "connector": "manual",
     "evidence_scope": "context_only",
     "follow_links": false,
-    "access_note": "Public wrapper verified 2026-10-25. Observed embedded content uses another host; it is not automatically accessed. Same-host public embed/download inspection is implemented, but no usable target was found. Opaque dashboard data connector remains unavailable.",
+    "access_note": "HTTP 200 on 2026-11-14. Observed app.powerbi.com/view iframe. Wrapper access works; structured record extraction requires a dedicated public Power BI adapter. No hidden endpoints are inferred.",
     "note": "Never extract company-level cases from a dashboard shell or fabricate hidden records."
   },
   {
     "purpose": "lead_evidence",
-    "reviewed_at": "2026-10-21",
+    "reviewed_at": "2026-11-14",
     "id": "dosh_fatal_cases",
     "title": "DOSH fatal accident cases",
     "url": "https://dosh.gov.my/en/kes-kemalangan-maut/",
@@ -74,7 +74,7 @@
     "connector": "html",
     "evidence_scope": "records",
     "follow_links": true,
-    "access_note": "Entry page verified 2026-10-21; individual case availability unverified.",
+    "access_note": "Production fetch verified the page still reports missing records on 2026-11-14. Retain as context only at runtime; no hidden cases inferred.",
     "note": "An accident report is not a conviction. Do not identify victims or infer blame, negligence, or hidden risk."
   },
   {
