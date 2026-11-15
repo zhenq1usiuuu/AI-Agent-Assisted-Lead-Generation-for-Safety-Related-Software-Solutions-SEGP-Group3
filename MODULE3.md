@@ -54,3 +54,5 @@ overwrite an existing file.
 If the input has no `filter_score` object, Module 2 is calculated locally
 before the second-model call. The reasoning output does not change scores,
 gates, evidence, organisation names or quotations.
+
+Local testing exception: REASONING_USE_KIMI=true reuses the complete Moonshot configuration and permits the same model. This does not provide independent cross-model validation. See README.md for the four-module test commands.

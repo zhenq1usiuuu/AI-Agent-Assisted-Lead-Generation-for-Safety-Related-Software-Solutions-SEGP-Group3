@@ -1,0 +1,12 @@
+Research Malaysian company candidates for safety inspection and corrective-action tracking software using the selected source categories: {categories}.
+
+Selected source guidance:
+{category_instructions}
+
+Use exactly these registered seed IDs for the search scope: {source_ids}.
+Respect each registry entry's connector, access and evidence restrictions. Do not replace unavailable sources with unselected categories. Explicit additional public URLs supplied by the operator may supplement this scope.
+
+Look for directly supported company-level workplace safety inspections, occupational accidents, safety audit findings or corrective-action initiatives. Certification and ESG membership may establish discovery candidates only; keep these separate from demonstrated safety-workflow needs.
+Exclude customs, quarantine, food-quality and product inspections unless the same evidence explicitly concerns occupational safety. Do not treat general training advertisements or association membership as company-specific needs.
+Extract continuous verbatim evidence and preserve source or event dates when available. Distinguish charges, convictions and compounds, and incident operators from affected companies. Do not infer guilt, current non-compliance or buying intent. Keep hypotheses explicitly qualified and unknown facts unknown.
+If supported signals are absent, return an empty signals array and explain coverage and retrieval limitations. Never invent company, certificate, dashboard or directory records. Only Receive prompt, Fetch + clean and Extract signals execute in this system.

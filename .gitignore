@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.venv/
+.idea/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest_tmp/
+data/
+
+*.egg-info/
+build/
+dist/
+
+/OneDrive/
+/skip

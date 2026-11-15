@@ -1,0 +1,312 @@
+{
+  "run_id": "5a561f95-6d85-4e1e-95c8-e7a695243b55",
+  "started_at": "2026-11-03T11:29:51.332192+00:00",
+  "mode": "demo",
+  "is_synthetic": true,
+  "static_prefix_sha256": "bfe0167f026a0d2c984e3f8a1b2ee1486db2a8332d7bdc332755a5a87cde17df",
+  "pipeline": [
+    "receive_prompt",
+    "fetch_clean",
+    "extract_signals",
+    "filter_score",
+    "llm_reasoning",
+    "customer_review",
+    "write_to_crm_or_clarify"
+  ],
+  "stages": {
+    "receive_prompt": {
+      "status": "completed",
+      "executor": "synthetic_fixture",
+      "result": {
+        "status": "ready",
+        "workflow": "safety inspection and corrective-action tracking",
+        "country": "Malaysia",
+        "sectors": [
+          "manufacturing"
+        ],
+        "keywords": [
+          "inspection",
+          "corrective"
+        ],
+        "seed_ids": [],
+        "questions": [],
+        "assumptions": [
+          "Synthetic fixed fixture; user prompt is not interpreted by an LLM in demo mode."
+        ]
+      }
+    },
+    "fetch_clean": {
+      "status": "completed",
+      "executor": "local_tools_on_fixture",
+      "document_count": 1
+    },
+    "extract_signals": {
+      "status": "completed",
+      "executor": "synthetic_fixture",
+      "eligible_document_count": 1,
+      "context_only_document_count": 0,
+      "signal_count": 1,
+      "rejected_signals": [],
+      "abstentions": []
+    },
+    "filter_score": {
+      "status": "completed",
+      "executor": "deterministic_rules",
+      "rubric_version": "v0-placeholder",
+      "account_count": 1,
+      "unresolved_count": 0
+    },
+    "llm_reasoning": {
+      "status": "completed",
+      "executor": "deepseek-v4-pro",
+      "model_role": "second_model",
+      "account_count": 1
+    }
+  },
+  "documents": [
+    {
+      "title": "Synthetic safety inspection example",
+      "language": "en",
+      "published_at": "2026-10-01",
+      "updated_at": null,
+      "date_evidence": {
+        "value": "2026-10-01",
+        "origin": "{'property': 'article:published_time'}",
+        "verified": false
+      },
+      "headings": [
+        "Demo Manufacturing Sdn Bhd"
+      ],
+      "text": "Demo Manufacturing Sdn Bhd\nDemo Manufacturing Sdn Bhd is piloting digital safety inspections and corrective-action tracking at its Malaysian factory.\nThe HSE team is reviewing inspection evidence and follow-up records.",
+      "text_truncated": false,
+      "links": [],
+      "link_count": 0,
+      "links_truncated": false,
+      "quality_warnings": [],
+      "document_id": "doc_demo",
+      "url": "https://example.com/synthetic-safety",
+      "requested_url": "https://example.com/synthetic-safety",
+      "captured_at": "2026-11-03T11:29:51.332192+00:00",
+      "source_class": "company_owned",
+      "content_hash": "00e52b0aabe408b8e540215877240e7402c09b39b0226df6e4e8229e9ed19854",
+      "http_status": null,
+      "robots_decision": "not_applicable_synthetic",
+      "terms_decision": "not_applicable_synthetic",
+      "synthetic": true
+    }
+  ],
+  "signals": [
+    {
+      "document_id": "doc_demo",
+      "organisation": "Demo Manufacturing Sdn Bhd",
+      "organisation_specific": true,
+      "sector": "manufacturing",
+      "safety_topic": "safety inspection",
+      "trigger_type": "initiative",
+      "workflow": "safety inspection and corrective-action tracking",
+      "urgency": null,
+      "excerpt": "Demo Manufacturing Sdn Bhd is piloting digital safety inspections and corrective-action tracking at its Malaysian factory.",
+      "need_hypothesis": "Synthetic example: inspection evidence and corrective-action records may benefit from a shared workflow.",
+      "buyer_role_hypothesis": "HSE manager (hypothesis only)",
+      "confidence": 0.9,
+      "ambiguity_flags": [
+        "synthetic_example"
+      ],
+      "recommended_next_step": "human_review",
+      "source_url": "https://example.com/synthetic-safety",
+      "source_class": "company_owned",
+      "source_requested_url": "https://example.com/synthetic-safety",
+      "evidence_level": "requires_semantic_review",
+      "source_id": null,
+      "evidence_scope": "records",
+      "source_title": "Synthetic safety inspection example",
+      "published_at": "2026-10-01",
+      "captured_at": "2026-11-03T11:29:51.332192+00:00",
+      "content_hash": "00e52b0aabe408b8e540215877240e7402c09b39b0226df6e4e8229e9ed19854",
+      "evidence_start": 27,
+      "evidence_end": 149,
+      "evidence_pages": [],
+      "evidence_text_method": "source_text",
+      "confidence_kind": "uncalibrated_model_estimate",
+      "requires_human_review": true
+    }
+  ],
+  "errors": [],
+  "not_executed": [
+    "customer_review",
+    "write_to_crm"
+  ],
+  "limitations": [
+    "This demo uses a fixed synthetic fixture and performs no network retrieval.",
+    "Live mode has bounded retrieval, chunking and optional local OCR; the demo does not exercise these features.",
+    "Confidence is uncalibrated. Evidence validation checks citations, not every semantic inference."
+  ],
+  "source_decisions": [],
+  "request": {
+    "prompt": "Test research",
+    "mode": "demo",
+    "additional_urls": [],
+    "additional_source_class": "company_owned",
+    "source_ids": [],
+    "permissions_confirmed": false,
+    "max_pages": 20,
+    "max_depth": 3,
+    "links_per_page": 3,
+    "max_chunks": 24,
+    "budget_usd": 1.0,
+    "semantic_review": "risk",
+    "ocr": false,
+    "source_query": null,
+    "resume_run_id": null
+  },
+  "status": "completed",
+  "tool_trace": [
+    {
+      "tool": "clean_html",
+      "status": "ok",
+      "url": "https://example.com/synthetic-safety",
+      "duration_ms": 107
+    },
+    {
+      "tool": "verify_evidence",
+      "status": "ok",
+      "url": null,
+      "duration_ms": 0
+    },
+    {
+      "tool": "filter_score",
+      "status": "ok",
+      "url": null,
+      "duration_ms": 0
+    }
+  ],
+  "llm_usage": [],
+  "finished_at": "2026-11-03T11:29:51.439603+00:00",
+  "filter_score": {
+    "rubric_version": "v0-placeholder",
+    "source_run_id": "5a561f95-6d85-4e1e-95c8-e7a695243b55",
+    "summary": {
+      "signals": 1,
+      "accounts": 1,
+      "unresolved": 0,
+      "grades": {
+        "D": 1
+      }
+    },
+    "accounts": [
+      {
+        "account_key": "demo manufacturing",
+        "display_name": "Demo Manufacturing Sdn Bhd",
+        "aliases": [
+          "Demo Manufacturing Sdn Bhd"
+        ],
+        "best_grade": "D",
+        "best_score": 39,
+        "needs_human_review": true,
+        "signals": [
+          {
+            "signal_id": "idx_0",
+            "organisation": "Demo Manufacturing Sdn Bhd",
+            "source_url": "https://example.com/synthetic-safety",
+            "score": {
+              "problem_fit": 8,
+              "trigger_strength": 12,
+              "buyer_authority": 8,
+              "digital_readiness": 5,
+              "timing_budget": 0,
+              "evidence_quality": 6
+            },
+            "total": 39,
+            "gates": [],
+            "grade": "D",
+            "discovery_only": false,
+            "reasons": {
+              "problem_fit": "manufacturing=True, workflow keyword hits=0",
+              "trigger_strength": "initiative x recency 1.0",
+              "buyer_authority": "role hypothesis=yes",
+              "digital_readiness": "digital/system terms in the cited text",
+              "timing_budget": "tender/project/hiring and stated urgency",
+              "evidence_quality": "primary source, dated, recent, review-supported"
+            }
+          }
+        ]
+      }
+    ],
+    "unresolved_signals": [],
+    "merge_candidates": [],
+    "not_executed": [
+      "llm_reasoning",
+      "customer_review",
+      "write_to_crm"
+    ]
+  },
+  "llm_reasoning": {
+    "stage": "llm_reasoning",
+    "model": "deepseek-v4-pro",
+    "provider": "api.deepseek.com",
+    "summary": "The evidence brief contains one account, Demo Manufacturing Sdn Bhd, with one D-grade signal scored 39/100. It is excluded because it falls below the 40-point research-candidate threshold.",
+    "accounts": [
+      {
+        "account_key": "demo manufacturing",
+        "display_name": "Demo Manufacturing Sdn Bhd",
+        "model": "deepseek-v4-pro",
+        "provider": "api.deepseek.com",
+        "grade": "D",
+        "score": 39,
+        "gates": [],
+        "recommendation": "exclude",
+        "recommendation_rule": "D -> exclude",
+        "reason": "Account Demo Manufacturing Sdn Bhd has one signal (idx_0) from a company_owned source dated 2026-10-01, scored D at 39/100 with no gates supplied. Score 39/100, below the 40-point threshold required for a research candidate. The required recommendation is exclude by D -> exclude. The source excerpt states: \"Demo Manufacturing Sdn Bhd is piloting digital safety inspections and corrective-action tracking at its Malaysian factory.\" The buyer-role hypothesis is HSE manager (hypothesis only), not a demonstrated role.",
+        "risks": [
+          "Evidence level is requires_semantic_review; the signal has not been manually confirmed.",
+          "Ambiguity flag synthetic_example indicates the example may not represent live market data.",
+          "Buyer authority is inferred from a role hypothesis only, not from demonstrated contact or title evidence.",
+          "Company_owned source may reflect a self-reported initiative rather than independent verification."
+        ],
+        "supporting_signal_ids": [
+          "idx_0"
+        ],
+        "next_step_hypothesis": "No further action while the account remains below the research-candidate threshold; if threshold or scope changes, human semantic review of signal idx_0 would be the next check.",
+        "usage_tokens": {
+          "prompt_tokens": 1667,
+          "completion_tokens": 1815,
+          "calls": 1
+        },
+        "estimated_call_cost_usd": 0.00244659,
+        "estimated_account_cost_share_usd": 0.00244659,
+        "cost_note": "A single reasoning batch covers all accounts; the per-account figure is an even cost share and is not a provider invoice."
+      }
+    ],
+    "open_questions": [
+      "Should the synthetic_example ambiguity flag suppress this signal from downstream research?"
+    ],
+    "validation": {
+      "status": "valid",
+      "issues": [],
+      "attempts": 1
+    },
+    "usage": {
+      "prompt_tokens": 1667,
+      "completion_tokens": 1815,
+      "calls": 1
+    },
+    "cost": {
+      "provider": "api.deepseek.com",
+      "model": "deepseek-v4-pro",
+      "prompt_tokens": 1667,
+      "completion_tokens": 1815,
+      "estimated_cost_usd": 0.00244659,
+      "pricing_usd_per_million": {
+        "input": 0.27,
+        "output": 1.1
+      },
+      "pricing_basis": "default_provider_estimate",
+      "note": "Estimate based on returned token usage and configured/default rates; the provider invoice is authoritative."
+    },
+    "architecture_note": "Extraction stages use Moonshot kimi-k3. LLM reasoning uses api.deepseek.com deepseek-v4-pro. The providers are separated so upstream evidence extraction and downstream reasoning have independent traceability and do not depend on a single model vendor.",
+    "generated_at": "2026-11-03T11:44:36.399217+00:00",
+    "rubric_version": "v0-placeholder",
+    "source_run_id": "5a561f95-6d85-4e1e-95c8-e7a695243b55",
+    "input_prompt_sha256": "2351505a067c0d7a02b586fe6720f0da8fa9eb9a97cbfc589f25eba24b1a781b"
+  }
+}

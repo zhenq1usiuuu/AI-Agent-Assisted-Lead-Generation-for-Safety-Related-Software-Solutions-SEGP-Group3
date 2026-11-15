@@ -1,0 +1,23 @@
+{
+  "sources": [
+    {
+      "account_key": "example manufacturing",
+      "url": "https://example.com/contact"
+    }
+  ],
+  "contacts": [
+    {
+      "account_key": "example manufacturing",
+      "kind": "person",
+      "name": "Example Contact",
+      "job_title": "Safety Manager",
+      "work_email": "contact@example.com",
+      "phone": null,
+      "source_url": "https://example.com/team",
+      "captured_at": "2026-11-13T00:00:00+00:00",
+      "source_text": "Example Manufacturing\nExample Contact, Safety Manager, contact@example.com",
+      "excerpt": "Example Contact, Safety Manager, contact@example.com",
+      "company_excerpt": "Example Manufacturing"
+    }
+  ]
+}

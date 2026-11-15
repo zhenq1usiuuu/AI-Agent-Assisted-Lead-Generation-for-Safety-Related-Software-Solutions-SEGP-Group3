@@ -1,6 +1,6 @@
 # Safety Signal Lab
 
-Terminal-first Malaysian safety-software research. The implemented stages are Receive prompt (Kimi), Fetch + clean (local tools), Extract signals (Kimi plus evidence checks), Filter + score (deterministic rules), and LLM reasoning (a separate configurable model). Customer review and CRM writes are not executed.
+Terminal-first Malaysian safety-software research. The implemented stages are Receive prompt (Kimi), Fetch + clean (local tools), Extract signals (Kimi plus evidence checks), Filter + score (deterministic rules), and LLM reasoning (a separate configurable model). Human review and local SQLite CRM writes are implemented; app.workflow provides a single-session entry point.
 
 ## Setup
 
@@ -101,7 +101,7 @@ python -m app.cli --source fmm_newsroom --prompt "Review public FMM workplace-sa
 
 Live runs automatically save `data/runs/<run_id>/checkpoint.json` and their budget ledger. This is a change from the earlier prototype that saved results only on request. Local checkpoints contain source text, prompt, outputs and unfinished work, but no API key. `--output` remains an optional export. Retain these files only as permitted by source conditions.
 
-The run guard reserves a conservative byte-based input allowance and maximum output cost before each paid attempt. Returned complete usage settles that attempt at a conservative rate ($6/M input, $15/M output); uncertain failures keep their full reservation. Reported estimates also account for default cache hits. Reservations/committed bounds are not actual charges, and may stop a run early. The provider invoice is authoritative. The per-run lock prevents simultaneous resumes. Separate run IDs have separate caps; this is not an account-wide spending limit.
+The run guard reserves a conservative byte-based input allowance and maximum output cost before each paid attempt. Returned complete usage settles that attempt using separate uncached-input, cache-read, cache-write and output rates; uncertain failures keep their full reservation. Settlement releases unused reservations and records the cache billing breakdown. Reservations/committed bounds are not actual charges, and may stop a run early. The provider invoice is authoritative. The per-run lock prevents simultaneous resumes. Separate run IDs have separate caps; this is not an account-wide spending limit.
 
 Budget, page, chunk or time limits preserve completed work. Resume using the run ID printed in JSON:
 
@@ -166,7 +166,7 @@ The original project brief defines the Malaysian use case. The [AI agent book](h
 
 ## Module One handoff
 
-This branch implements Receive prompt, Fetch + clean, Extract signals, Filter + score, and LLM reasoning for the SEGP group project. Customer review and CRM writes remain for downstream development.
+This branch implements Receive prompt, Fetch + clean, Extract signals, Filter + score, and LLM reasoning for the SEGP group project. Customer review is implemented in app.review. app.crm writes approved records to local SQLite; app.workflow supports bounded feedback reruns.
 
 Local environments, API keys, captured source documents, checkpoints, and evaluation artifacts are intentionally excluded from Git. Links into data/ in EVALUATION.md and REMEDIATION.md refer to local historical artifacts and are unavailable in this checkout. Recreate the environment and configure your own .env using the setup instructions above.
 
@@ -201,4 +201,343 @@ python -m app.cli --mode demo --prompt "Test research" --score --output scored.j
 python -m app.reasoning scored.json --out reasoned.json
 ```
 
-The default output is a readable report. Add `--json` to print the combined JSON. `--out` writes the complete result and never overwrites an existing file. `app/reasoning.py` refuses to run when the second model is the same model on the same endpoint as the Kimi stage, and rejects model output that references evidence outside its supplied brief. See [MODULE3.md](MODULE3.md) for the detailed Module 3 handoff.
+The default output is a readable report. Add `--json` to print the combined JSON. `--out` writes the complete result and never overwrites an existing file. `app/reasoning.py` refuses by default (unless REASONING_USE_KIMI=true) to run when the second model is the same model on the same endpoint as the Kimi stage, and rejects model output that references evidence outside its supplied brief. See [MODULE3.md](MODULE3.md) for the detailed Module 3 handoff.
+
+## Local Kimi testing of all four modules
+
+Use this repository root, not the historical duplicate under OneDrive/.
+The local .env uses MOONSHOT_API_KEY. REASONING_USE_KIMI=true explicitly reuses
+the Moonshot key, endpoint and model for Module 3. This is a single-model
+integration test, not independent cross-model validation. Set it to false
+to restore the separate-model configuration. Environment variables override .env.
+
+After installing requirements.txt into .venv, run these PowerShell commands:
+
+```powershell
+New-Item -ItemType Directory -Force data | Out-Null
+# Modules 1 and 2: retrieval/extraction and deterministic scoring.
+.\.venv\Scripts\python.exe -m app.cli --categories ESG --score --budget-usd 1 --permissions-confirmed --output data/scored.json
+# Module 3: paid Kimi reasoning.
+.\.venv\Scripts\python.exe -m app.reasoning data/scored.json --out data/reasoned.json
+# Module 4: interactive human decisions, no model call or CRM write.
+.\.venv\Scripts\python.exe -m app.review data/reasoned.json --reviewer "Local tester" --out data/reviewed.json
+```
+
+Only use --permissions-confirmed after reviewing source access conditions.
+Inspect status, errors and coverage. Output files must be new on every run.
+The Module 1 --budget-usd cap does NOT cover Module 3. Module 3 can retry
+requests/validation and has no enforced dollar cap. Moonshot reasoning cost
+estimates are null unless pricing rates are configured; inspect returned
+usage and your provider bill.
+
+No-cost checks:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.cli --mode demo --categories ESG --score --output data/demo-scored.json
+.\.venv\Scripts\python.exe -m app.review tests/fixtures/reasoned_demo.json --reviewer "Local tester" --out data/demo-reviewed.json
+.\.venv\Scripts\python.exe -m pytest -q tests
+```
+
+Demo fixtures are synthetic. Running app.reasoning on demo data still costs tokens.
+
+## Signal extraction diagnostics (2026-11-06)
+
+The inspected DOSH-only live runs had HTTP 404, a dashboard without usable
+same-host records, and a missing fatal-case table. Increasing OCR, depth or
+model budget cannot recover records absent from the fetched pages.
+A multi-source live run extracted four ESG candidates before its budget guard
+stopped with 12 chunks remaining. Its PDF had usable text and no OCR warnings.
+
+Extraction now schedules company/table/event-rich chunks first, keeps all
+remaining spans for coverage/resume, and allows 24 lines per chunk instead of
+12 to reduce repeated static-context calls. Existing checkpoints retain their
+original chunk boundaries. Link discovery now recognizes haze/jerebu and
+worker-health signals. Depth, host restrictions, robots and evidence gates are
+unchanged. No candidate is promoted to a demonstrated need without evidence.
+
+Inspect signal_diagnostics, coverage, errors and abstentions in every output.
+For company discovery start with ESG; DOSH-only can still return no records
+until accessible source data exists. Use --ocr only for scanned PDFs after
+installing requirements-ocr.txt. A partial run can be resumed with --resume
+RUN_ID --budget-usd 2 --max-chunks 40 --permissions-confirmed; this increases
+the cumulative cap, not a guaranteed charge. Do not interpret ESG membership
+as safety demand or legal compliance. Scoring also uses a manufacturing/CV
+safety rubric, which is narrower than general inspection research.
+
+Module 3 repairs one unambiguous schema mistake locally: if root open_questions
+is absent and account-level open_questions values are all string arrays, it
+moves those questions to the root without changing account analysis. The repair
+is recorded in model usage. Other schema errors trigger correction within the
+existing three-attempt limit; exhausted attempts fail explicitly. Returned API
+usage is recorded before content validation, including invalid responses.
+Correction retries can incur additional model charges.
+
+## Integrated workflow and CRM (2026-11-07)
+
+The fetched feature/one-stop-cli-and-crm branch added a SQLite writer and
+command aliases, but did not contain orchestration or feedback reruns.
+This local integration adds both while retaining the Kimi configuration,
+structure repair, extraction scheduling, and evidence gates.
+
+From this project directory:
+
+```powershell
+# One session: research -> score -> reasoning -> human review -> local CRM.
+python -m app.cli --full --categories ESG --reviewer "Will"
+# Equivalent dedicated entry point:
+python -m app.workflow --categories ESG --reviewer "Will"
+# Continue existing work without repeating extraction/reasoning unnecessarily:
+python -m app.cli --full --from-result data/reasoned.json --reviewer "Will"
+```
+
+Without --categories, the workflow asks for categories. Source terms must be
+reviewed before a fresh run. Module 3 requires explicit confirmation because
+its calls/retries are billed outside Module 1's --budget-usd cap. There is no
+global workflow dollar cap. A new feedback round has its own research cap;
+--max-rounds defaults to 2 and accepts 1-3 (including the first round).
+An imported result retains its stored research settings for feedback reruns.
+No command claiming a fully offline demo calls Module 3: use tests/mocks for
+an offline full-flow check, or the existing reasoned_demo.json review fixture.
+
+Every workflow writes a unique data/workflows/<uuid>/ directory containing
+research, scored, reasoned, reviewed and feedback JSON, a workflow manifest,
+and a CRM receipt when written. Failure or cancellation preserves completed
+stage artifacts. Continue from an exported scored/reasoned file with
+--from-result; an interrupted review must be reviewed again before CRM write.
+This is not automatic process-level resume. Never pass the checkpoint wrapper.
+
+Approve and edit decisions enter the local CRM queue. A separate terminal
+confirmation writes that queue to data/crm.db (override with --db). Reject,
+defer and merge do not enter CRM. They can trigger an optional clarification
+and fresh research round with saved feedback and an optional extra public URL.
+The source categories remain unchanged; the feedback is a research direction,
+not factual evidence. The new result is rescored and re-reviewed; prior
+approval is never copied forward. Merge records intent only, not entity merging.
+
+SQLite is the implemented CRM backend, not Salesforce/HubSpot or a remote CRM.
+The writer checks completed review decisions against queue identities, names,
+reviewer, timestamps, scores and evidence. It is not cryptographic proof of
+human identity; review files remain trusted local artifacts. Writes use one
+transaction. Exact repeats are skipped; changed records sharing a key raise
+an explicit conflict and roll back that batch rather than silently discard edits.
+No automatic update of previously imported accounts is implemented.
+
+Standalone writer:
+
+```powershell
+python -m app.crm data/reviewed.json --db data/crm.db
+```
+
+Optional editable installation (run in the virtual environment):
+
+```powershell
+python -m pip install -e .
+signal-lab --categories ESG --reviewer "Will"
+```
+
+signal-lab runs the integrated workflow; signal-research retains the previous
+research CLI; signal-review and signal-crm are standalone aliases. Use an
+editable source checkout because prompts/config/static are read from the
+project directory. Plain python -m app.cli retains its prior behavior; add
+--full for the integrated workflow. No external CRM connection is configured.
+
+## Module progress and timing
+
+The integrated entry points (--full, app.workflow and signal-lab) display a
+short step labels and a live elapsed stopwatch for Modules 1-4, CRM and
+clarification/rerun, followed by a timing summary at the end. Detailed timestamps
+and result summaries are written to files only. These are execution explanations,
+not the model's private chain of thought. No additional model calls are made.
+Module 1 timing covers receive prompt, fetch/clean and extraction together.
+
+Each workflow directory now contains progress.jsonl, appended at stage start
+and finish, and workflow.json with per-round modules and total timing.
+Timestamps use UTC ISO 8601. elapsed_seconds uses a monotonic clock;
+user_wait_seconds measures time inside input prompts, including review choices;
+processing_seconds excludes that input wait but includes model/network waits.
+The timer begins after initial category/reviewer/access setup. Stage file I/O
+outside the timed blocks contributes to total time, so stage sums need not equal
+the workflow total. Timing is local to this invocation, not historical source runs.
+Imported results are marked reused; skipped, deferred, not_executed, interrupted
+and failed stages are distinguished. Reuse durations measure only local handling.
+All previously saved workflow records remain unchanged.
+
+The stopwatch refreshes one console line every half second in an interactive
+terminal. It pauses drawing while you type (elapsed time continues counting),
+then resumes after input. Redirected output or consoles without TTY support
+receive plain step labels without animation. No precise timestamps or JSON
+progress objects are printed to the terminal. Human-review evidence cards and
+questions remain visible. The final summary includes total and per-stage times.
+
+## Business contacts and Twenty (2026-11-13)
+
+Company approval and person/contact approval are separate decisions. Missing
+contacts never block saving a company. No emails, calls or messages are sent.
+
+### Automatic public contact discovery
+
+Run the full pipeline without preparing a contacts JSON file:
+
+```powershell
+python -m app.cli --full --reviewer "Will" --contact-budget-usd 1 --max-rounds 1
+```
+
+After company review, approve the paid contact search prompt. The program searches
+for each approved company's website using the same MOONSHOT_API_KEY, lists actual
+search results, and asks you to select the verified company website and confirm
+its access terms. It fetches that page and observed same-host contact/about/team
+links with the existing robots, public-IP, rate and size protections. Search
+snippets alone are never contact evidence. Contact footers and mailto/tel values
+are retained. Kimi extracts published names, roles, work emails and business
+phones; missing fields remain null. General company routes remain separate from
+named individuals. Each populated field must occur verbatim in its source quote.
+Company identity must appear on the same fetched page; strict name matching can
+miss abbreviated or rebranded companies. JavaScript-only and image-only contacts
+are not automatically resolved. This is bounded discovery, not whole-site coverage.
+
+Review each candidate and its company association, supply a storage basis, and
+approve the final CRM write. Approved contacts are written to SQLite together
+with evidence and review records. Rejecting a contact does not block its company.
+Public visibility is not marketing consent: unknown/denied defaults to
+ do_not_contact=true. No outreach is sent. Never fabricate data to fill gaps.
+
+Limits per round: five approved companies, one search per company, four fetched
+pages per company, eight local text windows per page, and ten candidate contacts
+per model response. Remaining companies and errors are recorded in
+round-N-contacts.json. The separate model reservation cap defaults to USD 1;
+search API fees are billed separately and bounded by the five-call limit.
+The research and reasoning budgets are unchanged. Contact model reservations
+and returned usage are saved in round-N-contact-budget.json. No automatic search
+retries occur. Unsupported API access produces an explicit error and no invented
+contacts. API availability depends on the account/provider.
+
+Search API reference: https://platform.kimi.ai/docs/guide/best-practices-for-web-search
+The implementation uses POST /v1/tools/search with include_content=false.
+Use --skip-contacts to skip automatic discovery. Optional --contacts-file still
+supports explicit URLs/general inbox extraction or supplied verbatim evidence
+(config/contacts.example.json); it overrides automatic discovery and does not
+make contact-model calls. Example entries are synthetic and must not enter CRM.
+Use --from-result only with an existing exported research/scored/reasoned JSON.
+
+To inspect stored contacts from the project terminal:
+
+```powershell
+python -c "import sqlite3; c=sqlite3.connect('data/crm.db'); print(c.execute('SELECT account_key,name,job_title,work_email,phone,do_not_contact FROM contacts').fetchall()); c.close()"
+```
+
+New SQLite tables: companies, contacts, contact_evidence and contact_review_events.
+Existing leads and their records are preserved. Companies and contacts are linked
+by account_key; company routes and named people are distinguished by kind.
+Newer approved contact decisions update the contact while retaining review history;
+unknown/denied states cannot activate contact. The same submitted evidence is
+not duplicated. Sources stay in separate evidence rows; full source_text is kept
+in local workflow JSON, not copied to the contact database table. Protect and
+retain local JSON only as appropriate for its data. Rejected candidates are not
+inserted as contacts. Existing company conflict behavior remains unchanged.
+
+### Twenty adapter
+
+The local SQLite flow works without Twenty. To connect a self-hosted instance,
+configure TWENTY_BASE_URL (HTTPS origin) and TWENTY_API_KEY in .env. Copy
+config/twenty.mapping.example.json into a local data/ mapping and verify every
+resource and field against your own workspace Settings -> Developers -> API.
+The example is NOT a ready-to-use workspace schema. Create the required custom
+fields/objects first; the adapter does not modify metadata. Dot notation maps
+composite fields, e.g. name.firstName and emails.primaryEmail. The full sourced
+name is preserved in the firstName example rather than guessing family names.
+Phone/custom permission fields must be adapted to your workspace's real types.
+
+Mappings cover Company, Person, Opportunity, Lead Signal, Review Event and a
+custom Business Contact Route object for general company inboxes. Evidence and
+permission fields must be mapped, not silently dropped. Contacts must belong to
+approved companies and pass the same local evidence/approval checks before export.
+Old review files may lack full signal provenance; do not invent missing values.
+
+```powershell
+# Local export plan only; no network or API key needed.
+python -m app.twenty data/reviewed-with-contacts.json --mapping data/twenty.mapping.json --out data/twenty-plan.json
+# After inspecting the plan and verifying schema, set workspace_verified=true.
+# This command actually sends business/contact data to your configured Twenty.
+python -m app.twenty data/reviewed-with-contacts.json --mapping data/twenty.mapping.json --out data/twenty-receipt.json --apply
+```
+
+Use the new round-*-reviewed.json generated by your workflow as the input above.
+The adapter uses deterministic UUIDs and GET/create-or-PATCH per record, saves
+confirmed remote IDs to a receipt after each operation, and stops on uncertain
+errors. The target workspace must support caller-supplied IDs and these REST
+operations. No automatic retry of an uncertain write occurs. Subsequent explicit
+runs look up the same ID before writing. Multi-object writes are NOT a remote
+transaction: earlier successes remain if a later write fails. Keep the receipt
+and retry the same reviewed data after resolving the cause. Do not sync concurrent
+runs for the same accounts or replay an older consent state over a newer one.
+Use a separate test workspace for synthetic examples.
+
+Official schema and authentication reference:
+https://docs.twenty.com/developers/extend/api
+The connector has mock-HTTP coverage; live Twenty validation requires your actual
+workspace URL, credentials and verified mapping. It is a separate explicit export,
+not an automatic network side effect of approving a company in the terminal.
+
+## Usage settlement and category coverage
+
+The default budget is unchanged. Before every model attempt, the ledger reserves
+conservatively for that request. A successful response settles using its actual
+Chat Completions usage: uncached input, cache reads, 5m/1h cache writes, and output
+are separate billing buckets. Cache writes are not counted again as uncached
+input. Cache-write response headers identify mixed TTLs when supplied; otherwise
+the recorded request TTL applies (5m by default). Missing/invalid usage and
+uncertain failed attempts retain reservations. Valid usage is recorded even if
+subsequent JSON/schema validation fails. Existing ledgers with retained usage
+are recalculated on load; no historical calls are erased.
+
+The unified terminal prints Estimated used, Next reservation, Unresolved
+reservations, and Model budget in USD. The estimate is not an invoice and does
+not include search API fees or unmetered Module 3 charges. The next reservation
+is a preflight upper-bound estimate, not money already spent. A request can still
+be blocked when its reservation exceeds the remaining cap.
+
+K3 rates used (USD per million tokens): uncached 3, cache read 0.3, cache write
+5m 3 / 1h 6, output 15. Reference checked 2026-11-14:
+https://www.kimi.ai/academy/best-practices-for-context-caching
+
+Extraction now cycles across retained source categories, taking one chunk from
+each before returning to the same category. Evidence-rich chunks remain first
+within their category. This minimum first-pass scheduling opportunity is subject
+to the global budget; it is not a promise of one paid call per category. Terminal
+and JSON category summaries distinguish processed/pending chunks and signals.
+No extractable chunks does not mean the whole website has no relevant companies.
+DOSH dashboard/404 and SIRIM robots restrictions remain access limitations; these
+changes do not bypass controls or claim to repair unavailable upstream sources.
+
+## DOSH / SIRIM access recheck (2026-11-14)
+
+The legacy DOSH prosecution URL returned 404 and has been replaced by the
+verified official Malay prosecution/compound dashboard. Both dashboard entries
+are context-only: the live page embeds app.powerbi.com, not a static case table.
+The connector records the exact observed external embed for review, without
+silently expanding allowed hosts or claiming its records have been downloaded.
+
+SIRIM's homepage returned 200 and robots.txt returned 404 on this check; the old
+robots 500 is not a permanent site condition. Its published menu.js uses POST
+ProductSearch navigation to search.aspx. A fresh anonymous session following
+that navigation received MEMBER LOGIN, with a password field. No login bypass,
+credential collection or authenticated search was implemented. An explicit GET
+query alone cannot fix this current directory flow. Public company certificates
+can still be supplied as additional source URLs, subject to ordinary validation.
+
+Run a fresh diagnostic using production robots/IP/rate checks (no Kimi calls):
+
+```powershell
+python -m app.source_check --permissions-confirmed
+```
+
+The report is saved to data/source-health.json. Results distinguish reachable
+wrappers, external connectors, interactive directories, missing records and
+fetch failures. These are observations at capture time, not guarantees of future
+availability. Manual official exports are not automatically imported by this
+command. Neither directory currently guarantees automatic company records.
+
+Production verification on the same date still received SIRIM robots HTTP 500,
+although ordinary HTTP diagnostics received 404. Treat access as intermittent or
+request-path dependent; the production fetcher continues to fail closed. The
+stored source-health report is the production result, not a claim of restoration.
